@@ -221,6 +221,10 @@ fun BottomSheetPlayer(
     val queueWindows by playerConnection.queueWindows.collectAsState()
     val currentWindowIndex by playerConnection.currentWindowIndex.collectAsState()
     val queueTitle by playerConnection.queueTitle.collectAsState()
+    val (thumbnailCornerRadius, _) = rememberPreference(
+        key = com.nikhil.yt.constants.ThumbnailCornerRadiusKey,
+        defaultValue = 16f
+    )
 
     var showVUMeter by rememberPreference(ShowVUMeterKey, false)
 
@@ -865,32 +869,41 @@ fun BottomSheetPlayer(
                                             }
                                         }
 
+                                        val screenWidth = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp.dp
+                                        val vuSize = screenWidth - (com.nikhil.yt.constants.PlayerHorizontalPadding * 2)
+
                                         Box(
                                             modifier = Modifier.weight(1f),
                                             contentAlignment = Alignment.Center
                                         ) {
-                                            VuMeter(
-                                                modifier = Modifier
-                                                    .fillMaxSize()
-                                                    .aspectRatio(1f),
-                                                isPlayerExpanded = state.isExpanded
-                                            )
                                             Box(
                                                 modifier = Modifier
-                                                    .align(Alignment.TopEnd)
-                                                    .padding(8.dp)
-                                                    .size(28.dp)
-                                                    .clip(CircleShape)
-                                                    .background(Color.Black.copy(alpha = 0.4f))
-                                                    .clickable { showVUMeter = false },
+                                                    .size(vuSize)
+                                                    .aspectRatio(1f),
                                                 contentAlignment = Alignment.Center
                                             ) {
-                                                Icon(
-                                                    painter = painterResource(R.drawable.image),
-                                                    contentDescription = "Show artwork",
-                                                    tint = Color.White,
-                                                    modifier = Modifier.size(16.dp)
+                                                VuMeter(
+                                                    modifier = Modifier.fillMaxSize(),
+                                                    isPlayerExpanded = state.isExpanded,
+                                                    cornerRadius = thumbnailCornerRadius
                                                 )
+                                                Box(
+                                                    modifier = Modifier
+                                                        .align(Alignment.TopEnd)
+                                                        .padding(8.dp)
+                                                        .size(28.dp)
+                                                        .clip(CircleShape)
+                                                        .background(Color.Black.copy(alpha = 0.4f))
+                                                        .clickable { showVUMeter = false },
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    Icon(
+                                                        painter = painterResource(R.drawable.image),
+                                                        contentDescription = "Show artwork",
+                                                        tint = Color.White,
+                                                        modifier = Modifier.size(16.dp)
+                                                    )
+                                                }
                                             }
                                         }
                                         Spacer(modifier = Modifier.height(16.dp))
@@ -914,7 +927,7 @@ fun BottomSheetPlayer(
                                         Spacer(modifier = Modifier.height(12.dp))
                                     }
                                 }
-                             } else {
+                            } else {
                                 Box(
                                     modifier = Modifier.nestedScroll(state.preUpPostDownNestedScrollConnection)
                                 ) {
@@ -922,31 +935,41 @@ fun BottomSheetPlayer(
                                         horizontalAlignment = Alignment.CenterHorizontally,
                                         modifier = Modifier.fillMaxSize()
                                     ) {
+                                        val screenWidth = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp.dp
+                                        val vuSize = screenWidth - (com.nikhil.yt.constants.PlayerHorizontalPadding * 2)
+
                                         Box(
                                             modifier = Modifier.weight(1f),
                                             contentAlignment = Alignment.Center
                                         ) {
-                                            Thumbnail(
-                                                sliderPositionProvider = { sliderPosition },
-                                                modifier = Modifier.fillMaxSize(),
-                                                isPlayerExpanded = state.isExpanded
-                                            )
                                             Box(
                                                 modifier = Modifier
-                                                    .align(Alignment.TopEnd)
-                                                    .padding(8.dp)
-                                                    .size(28.dp)
-                                                    .clip(CircleShape)
-                                                    .background(Color.Black.copy(alpha = 0.4f))
-                                                    .clickable { showVUMeter = true },
+                                                    .size(vuSize)
+                                                    .aspectRatio(1f),
                                                 contentAlignment = Alignment.Center
                                             ) {
-                                                Icon(
-                                                    painter = painterResource(R.drawable.tune),
-                                                    contentDescription = "Show VU meter",
-                                                    tint = Color.White,
-                                                    modifier = Modifier.size(16.dp)
+                                                Thumbnail(
+                                                    sliderPositionProvider = { sliderPosition },
+                                                    modifier = Modifier.fillMaxSize(),
+                                                    isPlayerExpanded = state.isExpanded
                                                 )
+                                                Box(
+                                                    modifier = Modifier
+                                                        .align(Alignment.TopEnd)
+                                                        .padding(8.dp)
+                                                        .size(28.dp)
+                                                        .clip(CircleShape)
+                                                        .background(Color.Black.copy(alpha = 0.4f))
+                                                        .clickable { showVUMeter = true },
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    Icon(
+                                                        painter = painterResource(R.drawable.tune),
+                                                        contentDescription = "Show VU meter",
+                                                        tint = Color.White,
+                                                        modifier = Modifier.size(16.dp)
+                                                    )
+                                                }
                                             }
                                         }
                                         Spacer(modifier = Modifier.height(16.dp))

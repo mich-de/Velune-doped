@@ -33,6 +33,7 @@ import kotlin.math.sin
 fun VuMeter(
     modifier: Modifier = Modifier,
     isPlayerExpanded: Boolean = true,
+    cornerRadius: Float = 16f,
 ) {
     val playerConnection = LocalPlayerConnection.current ?: return
     val service = playerConnection.service
@@ -72,8 +73,7 @@ fun VuMeter(
 
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(12.dp))
-            .background(Color(0xFF111111)),
+            .clip(RoundedCornerShape(cornerRadius.dp)),
         contentAlignment = Alignment.Center,
     ) {
         Image(
