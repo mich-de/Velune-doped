@@ -882,13 +882,14 @@ fun BottomSheetPlayer(
                                             Box(
                                                 modifier = Modifier
                                                     .size(vuSize)
-                                                    .aspectRatio(1f),
+                                                    .aspectRatio(16f / 9f),
                                                 contentAlignment = Alignment.Center
                                             ) {
                                                 VuMeter(
                                                     modifier = Modifier.fillMaxSize(),
                                                     isPlayerExpanded = state.isExpanded,
-                                                    cornerRadius = thumbnailCornerRadius
+                                                    cornerRadius = thumbnailCornerRadius,
+                                                    isWide = true
                                                 )
                                                 Box(
                                                     modifier = Modifier
