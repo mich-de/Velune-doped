@@ -62,6 +62,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import android.content.ContentValues
+import android.provider.MediaStore
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
+import androidx.compose.ui.platform.LocalContext
+import com.nikhil.yt.constants.DeezerArlKey
+import com.nikhil.yt.constants.DeezerQualityKey
+import com.nikhil.yt.constants.EnableDeezerKey
+import com.nikhil.yt.deezer.Deezer
+import com.nikhil.yt.utils.rememberPreference
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
@@ -237,6 +248,89 @@ fun PlayerTitleSection(
 }
 
 @Composable
+fun DeezerDownloadButton(
+    mediaMetadata: MediaMetadata,
+    iconButtonColor: Color,
+    textBackgroundColor: Color,
+    size: androidx.compose.ui.unit.Dp = 24.dp
+) {
+    val context = LocalContext.current
+    val (enableDeezerPref) = rememberPreference(EnableDeezerKey, false)
+    val (deezerArl) = rememberPreference(DeezerArlKey, "")
+    val (deezerQuality) = rememberPreference(DeezerQualityKey, "MP3_128")
+    val coroutineScope = rememberCoroutineScope()
+    var isDownloading by remember { mutableStateOf(false) }
+
+    if (!enableDeezerPref) return
+
+    Box(
+        modifier = Modifier
+            .size(size + 12.dp)
+            .clip(CircleShape)
+            .clickable(enabled = !isDownloading) {
+                if (deezerArl.isBlank()) {
+                    Toast.makeText(context, "Deezer: enter ARL in Settings → Integrations", Toast.LENGTH_LONG).show()
+                    return@clickable
+                }
+                isDownloading = true
+                coroutineScope.launch {
+                    Deezer.setLogDir(context.cacheDir)
+                    try {
+                        Deezer.setArl(deezerArl)
+                        val loginResult = Deezer.login()
+                        loginResult.onFailure {
+                            Toast.makeText(context, "Deezer: Login failed - ${it.message}", Toast.LENGTH_LONG).show()
+                            isDownloading = false
+                            return@launch
+                        }
+                        val cacheDir = context.cacheDir.resolve("deezer_tmp")
+                        val title = mediaMetadata.title
+                        val artist = mediaMetadata.artists.joinToString(", ") { it.name }
+                        val result = Deezer.searchAndDownload(title, artist, cacheDir, deezerQuality)
+                        result.onSuccess { file ->
+                            val values = ContentValues().apply {
+                                put(MediaStore.Audio.Media.DISPLAY_NAME, file.name)
+                                put(MediaStore.Audio.Media.MIME_TYPE, "audio/mpeg")
+                                put(MediaStore.Audio.Media.RELATIVE_PATH, "Music/Deezer")
+                                put(MediaStore.Audio.Media.IS_PENDING, 1)
+                            }
+                            val uri = context.contentResolver.insert(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, values)
+                            if (uri != null) {
+                                context.contentResolver.openOutputStream(uri)?.use { out ->
+                                    file.inputStream().use { it.copyTo(out) }
+                                }
+                                values.clear()
+                                values.put(MediaStore.Audio.Media.IS_PENDING, 0)
+                                context.contentResolver.update(uri, values, null, null)
+                            }
+                            file.delete()
+                            Toast.makeText(context, "Saved: ${file.name} → Music/Deezer/", Toast.LENGTH_SHORT).show()
+                        }.onFailure {
+                            Toast.makeText(context, "Deezer: ${it.message}", Toast.LENGTH_LONG).show()
+                        }
+                    } catch (e: Exception) {
+                        Toast.makeText(context, "Deezer: ${e.javaClass.simpleName}: ${e.message}", Toast.LENGTH_LONG).show()
+                    } finally {
+                        isDownloading = false
+                    }
+                }
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        if (isDownloading) {
+            VeluneLoader(size = size)
+        } else {
+            Icon(
+                painter = painterResource(R.drawable.download),
+                contentDescription = "Download from Deezer",
+                tint = iconButtonColor,
+                modifier = Modifier.size(size)
+            )
+        }
+    }
+}
+
+@Composable
 fun PlayerTopActions(
     mediaMetadata: MediaMetadata,
     playerDesignStyle: PlayerDesignStyle,
@@ -267,6 +361,12 @@ fun PlayerTopActions(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                DeezerDownloadButton(
+                    mediaMetadata = mediaMetadata,
+                    iconButtonColor = iconButtonColor,
+                    textBackgroundColor = textBackgroundColor,
+                    size = 24.dp
+                )
                 Box(
                     modifier = Modifier
                         .size(42.dp)
@@ -325,6 +425,12 @@ fun PlayerTopActions(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                DeezerDownloadButton(
+                    mediaMetadata = mediaMetadata,
+                    iconButtonColor = textBackgroundColor.copy(alpha = 0.7f),
+                    textBackgroundColor = textBackgroundColor,
+                    size = 20.dp
+                )
                 Box(
                     modifier = Modifier
                         .size(36.dp)
@@ -376,6 +482,12 @@ fun PlayerTopActions(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                DeezerDownloadButton(
+                    mediaMetadata = mediaMetadata,
+                    iconButtonColor = textBackgroundColor,
+                    textBackgroundColor = textBackgroundColor,
+                    size = 22.dp
+                )
                 Surface(
                     onClick = {
                         val intent = Intent().apply {
@@ -466,6 +578,15 @@ fun PlayerTopActions(
         }
 
         PlayerDesignStyle.V1 -> {
+            DeezerDownloadButton(
+                mediaMetadata = mediaMetadata,
+                iconButtonColor = iconButtonColor,
+                textBackgroundColor = textBackgroundColor,
+                size = 24.dp
+            )
+
+            Spacer(modifier = Modifier.size(12.dp))
+
             Box(
                 modifier =
                 Modifier

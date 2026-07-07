@@ -95,7 +95,7 @@ fun AboutScreen(
                 ) {
                     // Title
                     Text(
-                        text = "VELUNE",
+                        text = "VELUNE DOPED",
                         style = MaterialTheme.typography.displaySmall,
                         fontWeight = FontWeight.Bold,
                         letterSpacing = 2.sp,
@@ -312,7 +312,7 @@ fun AboutItemCard(
     }
 }
 fun launchUpiPayment(context: android.content.Context, upiId: String, payeeName: String) {
-    val note = "Support for Velune"
+    val note = "Support for Velune Doped"
     val uriString = "upi://pay?pa=$upiId&pn=${android.net.Uri.encode(payeeName)}&tn=${android.net.Uri.encode(note)}&cu=INR"
     val uri = android.net.Uri.parse(uriString)
     val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, uri)
@@ -359,7 +359,7 @@ fun SupportDeveloperCard(modifier: Modifier = Modifier) {
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
-                    text = "If you enjoy Velune, consider buying me a chai!",
+                    text = "If you enjoy Velune Doped, consider buying me a chai!",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

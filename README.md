@@ -1,12 +1,11 @@
 
-
 <div align="center">
 
- <img src="https://raw.githubusercontent.com/nikhilvishwakarma00/Velune/main/fastlane/metadata/android/en-US/images/icon.png" width="110" />
+ <img src="https://raw.githubusercontent.com/mich-de/velune-doped/main/fastlane/metadata/android/en-US/images/icon.png" width="110" />
 
 </div>
 
-# 🌌 Velune — mich-de fork
+# 💉 velune-doped
 <div align="center">
 
 <pre>
@@ -18,18 +17,9 @@
   ╚═══╝  ╚══════╝╚══════╝ ╚═════╝ ╚═╝  ╚═══╝╚══════╝
 </pre>
 
-</div>
+**Velune** — YouTube Music client • No Ads • No Subscription • Full Control
 
-### 🎧 YouTube Music client with Android Auto Custom UI
-
-🚫 No Ads • 💰 No Subscription • ⚡ Full Control • 🚗 AA Template-based
-
-<div align="center">
-
-![Kotlin](https://img.shields.io/badge/Kotlin-7F52FF?style=for-the-badge&logo=kotlin&logoColor=white)
-![Jetpack Compose](https://img.shields.io/badge/Compose-4285F4?style=for-the-badge&logo=jetpackcompose&logoColor=white)
-![Android Auto](https://img.shields.io/badge/Android%20Auto-3DDC84?style=for-the-badge&logo=androidauto&logoColor=white)
-![License](https://img.shields.io/github/license/mich-de/Velune-michde?style=for-the-badge&labelColor=18181B&color=EF4444)
+<a href="#-android-auto-custom-ui">Android Auto</a> • <a href="#-deezer-downloader">Deezer</a> • <a href="#-whats-different">What's Different</a>
 
 </div>
 
@@ -37,113 +27,85 @@
 
 ## 🚗 Android Auto Custom UI
 
-This fork adds **template-based** Android Auto support via `androidx.car.app:1.7.0`, optimized for 7-inch horizontal screens.
+Template‑based Android Auto via `androidx.car.app:1.7.0`, optimized for 7‑inch horizontal screens.
 
-### What's new
-- **`CarAppService` + `VeluneSession`** — replaces Android Auto's default generic UI with custom templates
-- **`ListTemplate`** — category browsing: Songs, Artists, Albums, Playlists, Liked Songs
-- **`SearchTemplate`** — voice search with Google Assistant integration
-- **Optimized navigation** — 2-tap playback from root categories
-
-### Architecture
-```
-CarAppService → VeluneSession → BrowseRootScreen (ListTemplate)
-                               → SearchScreen (SearchTemplate)
-                               ↓
-                          MediaController (Player)
-                               ↓
-                    MusicService (MediaLibraryService)
-                               ↓
-               MediaLibrarySessionCallback.onSetMediaItems()
-```
-
-### Planned (V2)
-- Sub-category browsing (artist → albums → songs)
-- `PlaybackTemplate` with custom controls (like, repeat, shuffle)
-- Album art via Coil
+| Feature | Description |
+|---------|-------------|
+| `CarAppService` + `VeluneSession` | Replaces AA's default UI with custom templates |
+| `ListTemplate` | Category browsing: Songs, Artists, Albums, Playlists, Liked Songs |
+| `SearchTemplate` | Voice search via Google Assistant |
+| 2‑tap playback | Liked Songs & Downloaded Songs accessible directly from root |
 
 ---
 
-## 🎯 Highlights
+## 📥 Deezer Downloader
 
-### 🎤 Real-Time Synced Lyrics
+Download 128kbps MP3 directly from Deezer's CDN via ARL‑based auth — embedded ID3v2.3 tags, album art, saved to `Music/Deezer/`.
 
-- Word-by-word sync
-- Smooth animations
-- Translation support
-- Fully immersive playback
+| Entry point | Where |
+|-------------|-------|
+| Song context menu | `PlayerMenu.kt` — "Download from Deezer (128kbps)" |
+| Player top bar | `PlayerComponents.kt` — download icon next to menu |
 
 ---
 
-## ✨ Features
+## 💉 What's Different
 
-### 🎵 Core Experience
-- Ad-Free Playback
-- Full Library Sync
-- Offline Caching
-- Background Playback
+This fork adds **everything above** plus fixes and quality‑of‑life improvements:
 
-### 🔊 Audio Engine
-- Gapless Playback
-- Crossfade Engine
-- Silence Skipping
-- Loudness Normalization (EBU R128)
-- Tempo & Pitch Control
-- System EQ Integration
+| Area | Change |
+|------|--------|
+| **Player scrolling** | Removed `userScrollEnabled = !isPortrait` — the player menu was unscrollable in portrait mode, hiding the Deezer button |
+| **Lyrics caching** | Never save `LYRICS_NOT_FOUND` to DB — avoids permanent "no lyrics" lock after transient network errors |
+| **Lyrics auto‑fetch** | `ShowLyricsKey` defaults to `true` — lyrics pre‑fetched on song change |
+| **Lyrics fetch lifecycle** | Fixed `rememberCoroutineScope().launch` leak inside `LaunchedEffect` — fetch is now properly scoped |
+| **CarAppService** | Full `ListTemplate` + `SearchTemplate` custom UI (V1) |
+| **AA content styles** | Root categories use `CONTENT_STYLE_LIST_ITEM` for 7‑inch compact display |
+| **Deezer module** | `:deezer` JVM module — file‑based logging, MediaStore save, StripeDecryptor |
+| **Kizzy Discord RPC** | Disabled by default (privacy / battery) |
 
-### 🎨 UI & Discovery
-- Material You (Dynamic Colors)
-- Synced Lyrics + Translation
-- Personalized Home Feed
-- Year in Review Stats
+---
+
+## ✨ Features (upstream + fork)
+
+| Category | Features |
+|----------|----------|
+| 🎵 Core | Ad‑free, full library sync, offline caching, background playback |
+| 🔊 Audio | Gapless, crossfade, silence skipping, EBU R128 normalization, tempo/pitch, system EQ |
+| 🎤 Lyrics | 6 providers, word‑by‑word sync, romanization (JP/KO), translation |
+| 🎨 UI | Material You, synced lyrics, personalized home, year‑in‑review stats |
+| 🚗 Car | AA template‑based UI, voice search, media browsing |
+| 📥 Download | Deezer 128kbps MP3 with ID3v2.3 + album art |
+| 🤝 Together | LAN + Online synchronized listening |
+| 📊 Scrobbling | Last.fm + ListenBrainz |
 
 ---
 
 ## 🧠 Architecture
 
-- MVVM + Clean Architecture
-- Unidirectional Data Flow (UDF)
-- Modular & scalable codebase
+MVVM + UDF • Compose + M3 • Media3 ExoPlayer • Hilt DI • Room • Ktor • Coil 3
 
-## 🛠 Tech Stack
-
-| Layer | Stack |
-|------|------|
-| Language | Kotlin |
-| UI | Jetpack Compose + Material 3 |
-| Audio | Media3 / ExoPlayer |
-| DI | Hilt |
-| Database | Room |
-| Networking | Ktor |
-| Async | Coroutines + Flow |
-| Car | androidx.car.app:1.7.0 |
-
-## 📂 Project Structure
-
-```bash
-velune/
-├── app/
-│   ├── car/               ← CarAppService + Session + Screens
-│   ├── playback/           ← MusicService + MediaLibrarySessionCallback
-│   └── ui/                 ← Compose UI
-├── innertube/              ← YouTube API client
+```
+velune-doped/
+├── app/                    ← Android app (UI, playback, DI, car)
+├── innertube/              ← YouTube InnerTube API client
+├── deezer/                 ← Deezer ARL auth + MP3 download
 ├── lrclib/                 ← LRC lyrics
-├── betterlyrics/           ← TTML lyrics
 ├── kugou/                  ← KuGou lyrics
-├── lastfm/                 ← Last.fm scrobbling
 ├── simpmusic/              ← SimpMusic lyrics
-├── kizzy/                  ← Discord RPC
+├── betterlyrics/           ← TTML lyrics
+├── lastfm/                 ← Last.fm scrobbling
+├── kizzy/                  ← Discord RPC (disabled)
 └── canvas/                 ← Animated artwork
 ```
 
 ---
 
-## 🔗 Original Project
+## 🔗 Original
 
-This is a fork of [Velune](https://github.com/nikhilvishwakarma00/Velune) by Nikhil.  
-All original features are preserved. Customizations live on the `feat/android-auto-ui` branch.
+Fork of [Velune](https://github.com/nikhilvishwakarma00/Velune) by Nikhil. Upstream features preserved.
 
 ## ⚖️ Legal
 
-Velune is an independent client and is not affiliated with YouTube or Google.  
+Independent client. Not affiliated with YouTube, Google, or Deezer.  
 Licensed under **GPL-3.0**.

@@ -644,7 +644,7 @@ class MusicService :
 
         combine(
             currentMediaMetadata.distinctUntilChangedBy { it?.id },
-            dataStore.data.map { it[ShowLyricsKey] ?: false }.distinctUntilChanged(),
+            dataStore.data.map { it[ShowLyricsKey] ?: true }.distinctUntilChanged(),
         ) { mediaMetadata, showLyrics ->
             mediaMetadata to showLyrics
         }.collectLatest(ioScope) { (mediaMetadata, showLyrics) ->
@@ -652,13 +652,15 @@ class MusicService :
                     .first() == null
             ) {
                 val lyrics = lyricsHelper.getLyrics(mediaMetadata)
-                database.query {
-                    upsert(
-                        LyricsEntity(
-                            id = mediaMetadata.id,
-                            lyrics = lyrics,
-                        ),
-                    )
+                if (lyrics != LyricsEntity.LYRICS_NOT_FOUND) {
+                    database.query {
+                        upsert(
+                            LyricsEntity(
+                                id = mediaMetadata.id,
+                                lyrics = lyrics,
+                            ),
+                        )
+                    }
                 }
             }
         }

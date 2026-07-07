@@ -12,6 +12,7 @@
 1. **Shortcut Root Nodes**: Rather than browsing through nested menus, we will surface "Liked Songs" and "Downloaded Songs" directly on the main root menu. This allows users to start playing music in 2 taps.
 2. **Category Content Styles**: Top-level directory folders (Songs, Artists, Albums, Playlists) will use `CONTENT_STYLE_LIST_ITEM` styling hints instead of grids to fit the compact 7-inch display better. Actual folders with album/playlist art will retain `CONTENT_STYLE_GRID_ITEM`.
 3. **Custom Playback Commands**: The custom player actions layout (`Like`, `Repeat`, `Shuffle`, `Start Radio`) is already implemented and properly priority-ordered, ensuring the most useful commands (like Favoriting) are prominent on the Android Auto player screen.
+4. **Serialization Safety**: Made `USER_ID`, `SNG_ID` and other ID variables typed as `JsonElement` inside [GwModels.kt](file:///D:/android_player/deezer/src/main/kotlin/com/nikhil/yt/deezer/models/GwModels.kt) to handle dynamic JSON type mappings cleanly without decoding crashes.
 
 ## Session Log
 - **2026-07-03**: Cloned codebase and performed static analysis of the playback architecture. Drafted the implementation plan (`IMPLEMENTATION_PLAN.MD`) and task list (`TASKS.MD`).
@@ -36,3 +37,8 @@
   - Fixed build issues: Gradle SSL certificate (used cached dist), JDK 21 path (set to Studio's JBR), API mismatches (`CarAppService.onCreateSession()`, `MediaController` implements `Player`, no `Player.UNSET_TIME`, `SearchCallback` as explicit object).
   - **Branch:** `feat/android-auto-ui`
   - **Next (V2):** Sub-category browsing with database-backed lists, `PlaybackTemplate` with custom controls.
+- **2026-07-07**: Implemented Deezer direct downloader optimizations:
+  - Fixed the Deezer `login()` silent parsing crash by modifying `LoginUser.USER_ID` and other API keys in `GwModels.kt` to load as dynamic `JsonElement` values, and adjusted `Deezer.kt` to read `userObj.userId` as a Kotlin String.
+  - Added the "Download from Deezer" option in [SongMenu.kt](file:///D:/android_player/app/src/main/kotlin/com/nikhil/yt/ui/menu/SongMenu.kt) and [YouTubeSongMenu.kt](file:///D:/android_player/app/src/main/kotlin/com/nikhil/yt/ui/menu/YouTubeSongMenu.kt).
+  - Implemented an ID3v2.3 tag writer directly inside `Deezer.kt` to fetch and embed album cover art along with basic ID3 text tags (Title, Artist, Album) inside downloaded MP3 files.
+  - Created and added a dynamic `@Composable` `DeezerDownloadButton` shortcut directly inside `PlayerTopActions` in [PlayerComponents.kt](file:///D:/android_player/app/src/main/kotlin/com/nikhil/yt/ui/player/PlayerComponents.kt) with real-time download visual loading spinners.

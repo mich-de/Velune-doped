@@ -1,76 +1,39 @@
-# Velune Android Auto Optimization Plan (7-inch Touch Screens)
+# Velune Android Auto & Deezer Optimization Plan
 
-This implementation plan outlines the optimizations and architectural alignment needed to make **Velune** fully optimized for Android Auto, with a specific focus on 7-inch vehicle touch screens.
+This implementation plan outlines the optimizations and architectural changes implemented to make **Velune** fully optimized for Android Auto (especially on 7-inch touch screens) and to support direct, high-quality audio downloads from Deezer with embedded metadata.
 
 ## 1. Context & Architectural Overview
 
-Velune is a Jetpack Compose & Media3-based YouTube Music client. It already utilizes:
-- `MusicService` extending `MediaLibraryService` (using a `MediaLibrarySession`).
-- `MediaLibrarySessionCallback` implementing `MediaLibrarySession.Callback`.
-- Standard Android Auto intent declaration in the manifest via `@xml/automotive_app_desc`.
+Velune is a Jetpack Compose & Media3-based YouTube Music client.
+- `MusicService` extending `MediaLibraryService` manages audio playback.
+- `MediaLibrarySessionCallback` handles browse and search queries.
+- Android Auto custom template-based service `VeluneCarAppService` and `VeluneSession` are declared to provide a driver-safe, optimized horizontal touch screen experience.
 
-### Saved System Environment Paths
+### System Environment Paths
 *   **Android SDK Path:** `C:\Users\mdeangelis\AppData\Local\Android\Sdk`
 *   **ADB Executable:** [adb.exe](file:///C:/Users/mdeangelis/AppData/Local/Android/Sdk/platform-tools/adb.exe)
 *   **Android Studio Executable:** [studio64.exe](file:///C:/Program%20Files/Android/Android%20Studio/bin/studio64.exe)
 
-To deliver a premium experience on compact **7-inch touch screens** (typically 800x480 or similar resolutions with limited vertical real estate), we must optimize the navigation structure and user interface properties to follow Google's **Driver Distraction Guidelines** and **Media App Best Practices**.
-
-## 2. Goals & Optimizations
-
-### Goal A: Flatten Directory Hierarchy (Fewer Taps)
-*   **Problem:** Currently, to access downloaded or liked songs on Android Auto, the user must navigate through `Playlists` and then select `Liked Songs` or `Downloaded Songs`. Under driving safety constraints, this requires too many taps and causes distractions.
-*   **Solution:** Expose `Liked Songs` and `Downloaded Songs` directly in `MusicService.ROOT`. This cuts the tap path to just 2 steps (Root -> Songs list -> Play).
-*   **Implementation:** Inject these browsable playlists directly into the `onGetChildren` response for `MusicService.ROOT` in `MediaLibrarySessionCallback.kt`.
-
-### Goal B: Optimize Browsable Content Layouts (Content Styles)
-*   **Problem:** Standard root categories (Songs, Artists, Albums, Playlists) currently use `CONTENT_STYLE_GRID_ITEM` by default in Velune. For simple, abstract vector icons, this creates unnecessarily large grid blocks on a 7-inch screen.
-*   **Solution:** Use `CONTENT_STYLE_LIST_ITEM` for abstract category folders (Songs, Artists, Albums, Playlists) to make them compact and list-friendly, and retain `CONTENT_STYLE_GRID_ITEM` for albums/playlists that have rich graphic album art.
-*   **Implementation:** Extend the `browsableMediaItem` helper to accept style hints (`browsableHint` and `playableHint`), then style root-level items as lists and content-heavy folders (like Albums and Playlists) as grids.
-
-### Goal C: Keep Actions Driver-Safe & Ordered
-*   **Problem:** Android Auto renders custom action layouts. On small screens, only 1-2 custom action buttons fit on the playback bar; the rest are placed in an overflow menu.
-*   **Solution:** Velune already defines a list containing: `Like`, `Repeat`, `Shuffle`, and `Start Radio`. We will review and verify this order to ensure `Like` (highly interactive, driver favorite) remains the first priority.
-
 ---
 
-## 3. Implementation Steps
+## 2. Completed Optimizations & Implementations
 
-### Phase 1: Update `MediaLibrarySessionCallback.kt`
-1. Modify `browsableMediaItem` helper signature to accept custom `browsableHint` and `playableHint`.
-2. Update the root folder representation (`MusicService.ROOT` inside `onGetChildren`) to:
-   - Include "Liked Songs" and "Downloaded Songs" directly.
-   - Set `CONTENT_STYLE_LIST_ITEM` for all root-level browsable folders to preserve horizontal/vertical space.
-3. Keep grid-style layouts for actual subfolders (e.g. albums, playlists) where artwork is available.
+### Phase 1: Android Auto Layout Optimizations
+- **Flattened Category Nodes:** Surfaces "Liked Songs" and "Downloaded Songs" directly on the root menu of Android Auto, reducing navigation path to 2 taps.
+- **Content Styling:** Root-level abstract directories (Songs, Albums, Artists, Playlists) are styled as compact lists (`CONTENT_STYLE_LIST_ITEM`) to fit 7-inch vehicle touch screens perfectly. Actual albums and playlists retain grid layouts (`CONTENT_STYLE_GRID_ITEM`) to display artwork.
+- **Privacy Enforcement:** Discord RPC background tracking is completely disabled to optimize battery usage and prevent arbitrary HTTP requests.
 
-### Phase 2: Verification and Documentation
-1. Create `TASKS.MD` to trace tasks.
-2. Update `GEMINI.MD` memory log.
-3. Update `README.MD` to document these Android Auto features.
+### Phase 2: Android Auto Custom UI (Template-based)
+- Created `VeluneCarAppService` and `VeluneSession` using the Android for Cars App Library.
+- Implemented `BrowseRootScreen` (`ListTemplate`) and `SearchScreen` (`SearchTemplate`) for seamless category browsing and Voice Search.
 
----
+### Phase 3: Deezer Integration & Direct Downloads
+- **Serialization Bug Fix:** Resolved a kotlinx.serialization parsing bug in `GwModels.kt` by declaring `USER_ID` and `SNG_ID` as `JsonElement` and `error` as `JsonElement?`, allowing the app to successfully parse Deezer's numeric IDs and array error responses without throwing silent exceptions.
+- **Menu Downloader Additions:** Exposed "Download from Deezer" option dynamically across all song lists ([SongMenu.kt](file:///D:/android_player/app/src/main/kotlin/com/nikhil/yt/ui/menu/SongMenu.kt), [YouTubeSongMenu.kt](file:///D:/android_player/app/src/main/kotlin/com/nikhil/yt/ui/menu/YouTubeSongMenu.kt), [PlayerMenu.kt](file:///D:/android_player/app/src/main/kotlin/com/nikhil/yt/ui/menu/PlayerMenu.kt)) based on the integration preferences toggled in settings.
+- **Now Playing UI Shortcut:** Added a dedicated, stylized action button (`DeezerDownloadButton`) directly on the main player page ([PlayerComponents.kt](file:///D:/android_player/app/src/main/kotlin/com/nikhil/yt/ui/player/PlayerComponents.kt)) across all 5 styles (V1, V2, V3/V5, V4) with an inline loading spinner (`VeluneLoader`) to provide clear visual feedback during downloads.
 
-## 4. Phase 3: Android Auto Custom UI (Template-based)
-
-### Goal D: Replace Default AA Media UI with Custom Templates
-- **Problem:** Android Auto's default media UI is generic and doesn't reflect Velune's branding, content hierarchy, or 7-inch horizontal optimization.
-- **Solution:** Implement `CarAppService` + `Session` using the Android for Cars App Library (`androidx.car.app:app`) to render custom `ListTemplate`, `SearchTemplate`, and `PlaybackTemplate` screens.
-- **Status:** ✅ **V1 implemented** (browse root + search, plays via `onSetMediaItems`)
-
-### Architecture
-- `VeluneCarAppService` — entry point, declared in manifest, creates `VeluneSession`
-- `VeluneSession` — connects to `MusicService` via `MediaController`, manages playback
-- `BrowseRootScreen` — `ListTemplate` with categories: Liked Songs, Songs, Artists, Albums, Playlists
-- `SearchScreen` — `SearchTemplate` with `onSearchSubmitted` callback, plays results
-
-### Files Created
-| File | Description |
-|------|-------------|
-| `app/src/main/kotlin/com/nikhil/yt/car/VeluneCarAppService.kt` | CarAppService entry point |
-| `app/src/main/kotlin/com/nikhil/yt/car/VeluneSession.kt` | Session + browse/search screens |
-
-### V2 Features (Planned)
-- Sub-category browsing (artist → albums → songs)
-- `PlaybackTemplate` with custom controls (like, repeat, shuffle)
-- Album art via Coil in car list items
-- Database-backed lists instead of `onSetMediaItems` playback
+### Phase 4: Native ID3v2.3 Tagger
+- Implemented a custom pure-Kotlin ID3v2.3 tag encoder inside `Deezer.kt` to write metadata directly.
+- Downloads album cover art from Deezer (`track.artworkUrl`) and embeds it in the `"APIC"` (attached picture) frame.
+- Writes `"TIT2"` (Title), `"TPE1"` (Artist), and `"TALB"` (Album) text frames.
+- Saves tagged files directly to the standard public storage directory (`Music/Deezer/Artist - Title.mp3`) so they are read properly by system players and car dashboard units.

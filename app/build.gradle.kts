@@ -133,10 +133,12 @@ android {
         generateLocaleConfig = false
     }
 
+    experimentalProperties["android.experimental.standalone.16kPageAlignment"] = true
+
     packaging {
         jniLibs {
-            useLegacyPackaging = false
-            keepDebugSymbols += listOf(
+            useLegacyPackaging = true
+            excludes += listOf(
                 "**/libandroidx.graphics.path.so",
                 "**/libdatastore_shared_counter.so"
             )
@@ -219,6 +221,7 @@ dependencies {
     implementation(project(":kizzy"))
     implementation(project(":simpmusic"))
     implementation(project(":canvas"))
+    implementation(project(":deezer"))
     implementation("com.github.Kyant0:m3color:2025.4")
     implementation(libs.backdrop)
 
