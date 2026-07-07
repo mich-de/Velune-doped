@@ -846,7 +846,7 @@ fun BottomSheetPlayer(
                                         Spacer(modifier = Modifier.height(16.dp))
                                         val currentMetadata = enrichedMetadata ?: mediaMetadata
                                         currentMetadata?.let { metadata ->
-                                            Box(
+                                            Column(
                                                 modifier = Modifier
                                                     .fillMaxWidth()
                                                     .padding(horizontal = com.nikhil.yt.constants.PlayerHorizontalPadding)
