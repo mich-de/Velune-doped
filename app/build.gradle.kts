@@ -152,6 +152,10 @@ android {
     }
 }
 
+base {
+    archivesName.set("Velune_Doped_v${android.defaultConfig.versionName?.trim()}")
+}
+
 kotlin {
     jvmToolchain(21)
 }

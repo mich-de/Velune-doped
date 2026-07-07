@@ -40,11 +40,13 @@ Template‑based Android Auto via `androidx.car.app:1.7.0`, optimized for 7‑in
 
 ## 📥 Deezer Downloader
 
-Download 128kbps MP3 directly from Deezer's CDN via ARL‑based auth — embedded ID3v2.3 tags, album art, saved to `Music/Deezer/`.
+Download FLAC, MP3 320kbps, or MP3 128kbps directly from Deezer's CDN via ARL‑based auth — embedded ID3v2.3 tags, album art, saved to `Music/Deezer/`.
 
-| Entry point | Where |
-|-------------|-------|
-| Song context menu | `PlayerMenu.kt` — "Download from Deezer (128kbps)" |
+| Feature | Description |
+|---------|-------------|
+| **Quality Selector** | Choose between `MP3_128`, `MP3_320`, or `FLAC` in settings. Automatic fallback to lower quality if not supported by ARL account type. |
+| **Multiline ARL Input** | Multiline text area in integrations panel for comfortable pasting of 192/256-character tokens. |
+| Song context menu | `PlayerMenu.kt` — "Download from Deezer ($quality)" |
 | Player top bar | `PlayerComponents.kt` — download icon next to menu |
 
 ---
@@ -63,6 +65,8 @@ This fork adds **everything above** plus fixes and quality‑of‑life improveme
 | **AA content styles** | Root categories use `CONTENT_STYLE_LIST_ITEM` for 7‑inch compact display |
 | **Deezer module** | `:deezer` JVM module — file‑based logging, MediaStore save, StripeDecryptor |
 | **Kizzy Discord RPC** | Disabled by default (privacy / battery) |
+| **New Branding** | "Velune Doped" name, hybrid syringe/equalizer launcher and monochrome status bar/notification icons |
+| **Gradle Builds** | Output APKs are automatically named with `Velune_Doped_v<version>` base name |
 
 ---
 
