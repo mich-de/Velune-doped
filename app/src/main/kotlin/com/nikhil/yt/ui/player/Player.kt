@@ -697,9 +697,11 @@ fun BottomSheetPlayer(
                                         if (isLoading) {
                                             com.nikhil.yt.ui.component.VeluneLoader(
                                                 size = 48.dp,
+                                                color = TextBackgroundColor,
                                                 modifier = Modifier.align(Alignment.Center)
                                             )
                                         }
+
                                         Box(
                                             modifier = Modifier
                                                 .align(Alignment.TopEnd)
@@ -901,9 +903,11 @@ fun BottomSheetPlayer(
                                                 if (isLoading) {
                                                     com.nikhil.yt.ui.component.VeluneLoader(
                                                         size = 48.dp,
+                                                        color = TextBackgroundColor,
                                                         modifier = Modifier.align(Alignment.Center)
                                                     )
                                                 }
+
                                                 Box(
                                                     modifier = Modifier
                                                         .align(Alignment.TopEnd)

@@ -326,7 +326,7 @@ fun DeezerDownloadButton(
         contentAlignment = Alignment.Center
     ) {
         if (isDownloading) {
-            VeluneLoader(size = size)
+            VeluneLoader(size = size, color = iconButtonColor)
         } else {
             Icon(
                 painter = painterResource(R.drawable.download),
@@ -973,7 +973,7 @@ fun PlayerPlaybackControls(
                             .clip(RoundedCornerShape(32.dp))
                     ) {
                         if (isLoading) {
-                            VeluneLoader(size = 42.dp)
+                            VeluneLoader(size = 42.dp, color = iconButtonColor)
                         } else {
                             Icon(
                                 painter = painterResource(
@@ -1086,7 +1086,7 @@ fun PlayerPlaybackControls(
                         contentAlignment = Alignment.Center
                     ) {
                         if (isLoading) {
-                            VeluneLoader(size = 32.dp)
+                            VeluneLoader(size = 32.dp, color = icBackgroundColor)
                         } else {
                             Icon(
                                 painter = painterResource(
@@ -1279,7 +1279,7 @@ fun PlayerPlaybackControls(
                             contentAlignment = Alignment.Center
                         ) {
                             if (isLoading) {
-                                VeluneLoader(size = 40.dp)
+                                VeluneLoader(size = 40.dp, color = icBackgroundColor)
                             } else {
                                 Icon(
                                     painter = painterResource(
@@ -1433,7 +1433,7 @@ fun PlayerPlaybackControls(
                         },
                 ) {
                     if (isLoading) {
-                        VeluneLoader(size = 36.dp)
+                        VeluneLoader(size = 36.dp, color = iconButtonColor, modifier = Modifier.align(Alignment.Center))
                     } else {
                         Image(
                             painter =
