@@ -32,7 +32,7 @@ object SpotifyImporter {
         val playlistId = extractPlaylistId(url)
             ?: return@withContext Result.failure(IllegalArgumentException("Invalid Spotify playlist URL"))
 
-        val fetchUrl = "https://open.spotify.com/playlist/$playlistId"
+        val fetchUrl = "https://open.spotify.com/embed/playlist/$playlistId"
         val request = Request.Builder()
             .url(fetchUrl)
             .header("User-Agent", userAgent)
@@ -49,15 +49,7 @@ object SpotifyImporter {
                     return@withContext Result.failure(Exception("Empty response from Spotify"))
                 }
 
-                // 1. Parse playlist name
-                val ogTitleRegex = Regex("""<meta\s+property="og:title"\s+content="([^"]+)"""", RegexOption.IGNORE_CASE)
-                val titleRegex = Regex("""<title>([^<]+)</title>""", RegexOption.IGNORE_CASE)
-                val rawName = ogTitleRegex.find(html)?.groupValues?.get(1)
-                    ?: titleRegex.find(html)?.groupValues?.get(1)?.substringBefore(" | Spotify")?.substringBefore(" - playlist")
-                    ?: "Imported Spotify Playlist"
-                val playlistName = rawName.replace("&amp;", "&").replace("&quot;", "\"").replace("&#39;", "'")
-
-                // 2. Parse __NEXT_DATA__ or initial-state JSON
+                // 1. Parse __NEXT_DATA__ or initial-state JSON
                 val regexNextData = Regex("""<script\s+id="__NEXT_DATA__"\s+type="application/json">(.*?)</script>""", RegexOption.DOT_MATCHES_ALL)
                 val regexInitialState = Regex("""<script\s+id="initial-state"\s+type="application/json">(.*?)</script>""", RegexOption.DOT_MATCHES_ALL)
 
@@ -66,6 +58,17 @@ object SpotifyImporter {
                     ?: return@withContext Result.failure(Exception("Could not find Spotify playlist data in HTML. Make sure the playlist is public."))
 
                 val jsonElement = Json.parseToJsonElement(jsonString)
+                
+                // 2. Parse playlist name
+                val nameFromJson = findPlaylistName(jsonElement)
+                val ogTitleRegex = Regex("""<meta\s+property="og:title"\s+content="([^"]+)"""", RegexOption.IGNORE_CASE)
+                val titleRegex = Regex("""<title>([^<]+)</title>""", RegexOption.IGNORE_CASE)
+                val rawName = nameFromJson
+                    ?: ogTitleRegex.find(html)?.groupValues?.get(1)
+                    ?: titleRegex.find(html)?.groupValues?.get(1)?.substringBefore(" | Spotify")?.substringBefore(" - playlist")
+                    ?: "Imported Spotify Playlist"
+                val playlistName = rawName.replace("&amp;", "&").replace("&quot;", "\"").replace("&#39;", "'")
+
                 val tracksArray = findTracksArray(jsonElement)
                     ?: return@withContext Result.failure(Exception("Could not parse tracks array from page data."))
 
@@ -86,8 +89,32 @@ object SpotifyImporter {
         }
     }
 
+    private fun findPlaylistName(jsonElement: JsonElement): String? {
+        if (jsonElement is JsonObject) {
+            val type = jsonElement["type"]?.jsonPrimitive?.content
+            if (type == "playlist") {
+                val name = jsonElement["name"]?.jsonPrimitive?.content
+                    ?: jsonElement["title"]?.jsonPrimitive?.content
+                if (name != null) return name
+            }
+            for (value in jsonElement.values) {
+                val found = findPlaylistName(value)
+                if (found != null) return found
+            }
+        } else if (jsonElement is JsonArray) {
+            for (value in jsonElement) {
+                val found = findPlaylistName(value)
+                if (found != null) return found
+            }
+        }
+        return null
+    }
+
     private fun findTracksArray(jsonElement: JsonElement): JsonArray? {
         if (jsonElement is JsonObject) {
+            if (jsonElement.containsKey("trackList") && jsonElement["trackList"] is JsonArray) {
+                return jsonElement["trackList"] as JsonArray
+            }
             if (jsonElement.containsKey("tracks") && jsonElement["tracks"] is JsonObject) {
                 val tracksObj = jsonElement["tracks"] as JsonObject
                 if (tracksObj.containsKey("items") && tracksObj["items"] is JsonArray) {
@@ -127,6 +154,7 @@ object SpotifyImporter {
         } else {
             track["artistName"]?.jsonPrimitive?.content
                 ?: track["artist"]?.jsonPrimitive?.content
+                ?: track["subtitle"]?.jsonPrimitive?.content
                 ?: ""
         }
 
