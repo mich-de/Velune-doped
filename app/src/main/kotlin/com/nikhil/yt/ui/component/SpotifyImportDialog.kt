@@ -40,6 +40,7 @@ import java.time.LocalDateTime
 @Composable
 fun SpotifyImportDialog(
     isVisible: Boolean,
+    initialUrl: String = "",
     snackbarHostState: SnackbarHostState? = null,
     onDismiss: () -> Unit,
 ) {
@@ -148,7 +149,7 @@ fun SpotifyImportDialog(
         TextFieldDialog(
             icon = { Icon(painter = painterResource(R.drawable.add), contentDescription = null) },
             title = { Text(text = "Importa da Spotify") },
-            initialTextFieldValue = TextFieldValue(""),
+            initialTextFieldValue = TextFieldValue(initialUrl),
             autoFocus = true,
             onDismiss = {
                 if (!isImporting) {
