@@ -52,7 +52,11 @@ fun LibrarySpotifyScreen(
     var selectedPlaylistUrl by remember { mutableStateOf("") }
     val playerAwarePadding = LocalPlayerAwareWindowInsets.current.asPaddingValues()
 
-    Column(modifier = Modifier.fillMaxSize()) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(top = playerAwarePadding.calculateTopPadding())
+    ) {
         filterContent()
         
         Text(
@@ -68,7 +72,7 @@ fun LibrarySpotifyScreen(
             contentPadding = PaddingValues(
                 start = 16.dp,
                 end = 16.dp,
-                top = 16.dp,
+                top = 8.dp,
                 bottom = playerAwarePadding.calculateBottomPadding() + 16.dp
             ),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
