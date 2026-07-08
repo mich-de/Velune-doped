@@ -373,12 +373,62 @@ fun LibraryPlaylistsScreen(
     }
 
     var showCreatePlaylistDialog by rememberSaveable { mutableStateOf(false) }
+    var showCreateChoiceDialog by rememberSaveable { mutableStateOf(false) }
+    var showImportSpotifyDialog by rememberSaveable { mutableStateOf(false) }
 
     if (showCreatePlaylistDialog) {
         CreatePlaylistDialog(
             onDismiss = { showCreatePlaylistDialog = false },
             initialTextFieldValue = initialTextFieldValue,
             allowSyncing = allowSyncing
+        )
+    }
+
+    if (showCreateChoiceDialog) {
+        com.nikhil.yt.ui.component.DefaultDialog(
+            onDismiss = { showCreateChoiceDialog = false },
+            title = { Text(text = "Nuova Playlist") },
+            buttons = {
+                androidx.compose.material3.TextButton(onClick = { showCreateChoiceDialog = false }) {
+                    Text(text = stringResource(android.R.string.cancel))
+                }
+            }
+        ) {
+            androidx.compose.material3.TextButton(
+                onClick = {
+                    showCreateChoiceDialog = false
+                    showCreatePlaylistDialog = true
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.add),
+                    contentDescription = null,
+                    modifier = Modifier.padding(end = 8.dp)
+                )
+                Text(text = "Crea Playlist Locale")
+            }
+            androidx.compose.material3.TextButton(
+                onClick = {
+                    showCreateChoiceDialog = false
+                    showImportSpotifyDialog = true
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.music_note),
+                    contentDescription = null,
+                    modifier = Modifier.padding(end = 8.dp)
+                )
+                Text(text = "Importa da Spotify")
+            }
+        }
+    }
+
+    if (showImportSpotifyDialog) {
+        com.nikhil.yt.ui.component.SpotifyImportDialog(
+            isVisible = showImportSpotifyDialog,
+            onDismiss = { showImportSpotifyDialog = false }
         )
     }
 
@@ -730,7 +780,7 @@ fun LibraryPlaylistsScreen(
                     lazyListState = lazyListState,
                     icon = R.drawable.add,
                     onClick = {
-                        showCreatePlaylistDialog = true
+                        showCreateChoiceDialog = true
                     },
                 )
             }
@@ -872,7 +922,7 @@ fun LibraryPlaylistsScreen(
                     lazyListState = lazyGridState,
                     icon = R.drawable.add,
                     onClick = {
-                        showCreatePlaylistDialog = true
+                        showCreateChoiceDialog = true
                     },
                 )
             }
