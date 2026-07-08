@@ -163,8 +163,8 @@ private fun DrawScope.drawVintageNeedles(
         )
     }
     
-    drawNeedle(leftLevel, leftNeedleColor)
-    drawNeedle(rightLevel, rightNeedleColor)
+    val combinedLevel = maxOf(leftLevel, rightLevel)
+    drawNeedle(combinedLevel, leftNeedleColor)
     
     // Glowing light bulb center
     drawCircle(
