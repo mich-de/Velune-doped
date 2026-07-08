@@ -71,6 +71,7 @@ fun IntegrationScreen(
     val (deezerQuality, onDeezerQualityChange) = rememberPreference(DeezerQualityKey, "MP3_128")
 
     var showListenBrainzTokenEditor = remember { mutableStateOf(false) }
+    val showImportSpotifyDialog = remember { mutableStateOf(false) }
 
     Column(
         Modifier
@@ -169,6 +170,15 @@ fun IntegrationScreen(
         }
 
         PreferenceGroupTitle(
+            title = "Spotify",
+        )
+        PreferenceEntry(
+            title = { Text("Spotify Importer") },
+            icon = { Icon(painterResource(R.drawable.music_note), null) },
+            onClick = { showImportSpotifyDialog.value = true }
+        )
+
+        PreferenceGroupTitle(
             title = stringResource(R.string.scrobbling),
         )
 
@@ -224,6 +234,13 @@ fun IntegrationScreen(
             extraContent = {
                 InfoLabel(text = stringResource(R.string.listenbrainz_scrobbling_description))
             }
+        )
+    }
+
+    if (showImportSpotifyDialog.value) {
+        com.nikhil.yt.ui.component.SpotifyImportDialog(
+            isVisible = showImportSpotifyDialog.value,
+            onDismiss = { showImportSpotifyDialog.value = false }
         )
     }
 }

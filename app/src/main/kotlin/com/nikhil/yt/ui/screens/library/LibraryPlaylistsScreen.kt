@@ -479,6 +479,19 @@ fun LibraryPlaylistsScreen(
 
             IconButton(
                 onClick = {
+                    showImportSpotifyDialog = true
+                },
+                modifier = Modifier.padding(start = 6.dp),
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.music_note),
+                    contentDescription = "Importa da Spotify",
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+
+            IconButton(
+                onClick = {
                     viewType = viewType.toggle()
                 },
                 modifier = Modifier.padding(start = 6.dp, end = 6.dp),
