@@ -1,8 +1,6 @@
 package com.nikhil.yt.ui.component
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -21,8 +19,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.unit.dp
 import com.nikhil.yt.LocalPlayerConnection
 import kotlinx.coroutines.delay
@@ -46,24 +43,18 @@ fun VuMeter(
     LaunchedEffect(isPlaying, isPlayerExpanded) {
         if (isPlaying && isPlayerExpanded) {
             while (true) {
-                // Poll the amplitude values from our custom audio processor
                 val rawL = service.amplitudeProcessor.latestAmplitudeL
                 val rawR = service.amplitudeProcessor.latestAmplitudeR
-
-                // Scale it by the current player volume (which is 0f to 1f)
                 val currentVol = service.player.volume
-                
-                // Add a small random jitter to make it feel organic and warm
                 val jitterL = if (rawL > 0.05f) (Math.random().toFloat() - 0.5f) * 0.02f else 0f
                 val jitterR = if (rawR > 0.05f) (Math.random().toFloat() - 0.5f) * 0.02f else 0f
 
                 leftLevel = (rawL * currentVol + jitterL).coerceIn(0f, 1f)
                 rightLevel = (rawR * currentVol + jitterR).coerceIn(0f, 1f)
 
-                delay(16) // ~60 FPS polling rate
+                delay(16)
             }
         } else {
-            // Decay to zero when paused
             while (leftLevel > 0f || rightLevel > 0f) {
                 leftLevel = (leftLevel * 0.8f - 0.02f).coerceIn(0f, 1f)
                 rightLevel = (rightLevel * 0.8f - 0.02f).coerceIn(0f, 1f)
@@ -77,23 +68,19 @@ fun VuMeter(
             .clip(RoundedCornerShape(cornerRadius.dp)),
         contentAlignment = Alignment.Center,
     ) {
-        Image(
-            painter = painterResource(
-                if (isWide) com.nikhil.yt.R.drawable.vu_meter_wide_bg
-                else com.nikhil.yt.R.drawable.vu_meter_bg
-            ),
-            contentDescription = null,
-            modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.Crop
-        )
-
         Canvas(modifier = Modifier.fillMaxSize().padding(12.dp)) {
+            val w = size.width
+            val h = size.height
+            val cx = w / 2f
+            val cy = h * (if (isWide) 0.95f else 0.58f)
+            val needleLen = h * (if (isWide) 0.78f else 0.44f)
+
             // Real-time transient beat-synchronized ambery radial light glow
             val timeSinceBeat = System.currentTimeMillis() - service.amplitudeProcessor.lastBeatTime
             val lightIntensity = (1f - (timeSinceBeat.toFloat() / 300f)).coerceIn(0.2f, 1.0f)
             val glowColor = Color(0xFFFF9800).copy(alpha = 0.55f * lightIntensity)
             val glowRadius = size.height * (if (isWide) 0.8f else 0.5f)
-            val centerGlow = Offset(size.width / 2f, size.height * (if (isWide) 0.95f else 0.58f))
+            val centerGlow = Offset(cx, cy)
 
             drawCircle(
                 brush = androidx.compose.ui.graphics.Brush.radialGradient(
@@ -105,6 +92,10 @@ fun VuMeter(
                 center = centerGlow
             )
 
+            // Draw the programmatic transparent meter scale markings
+            drawMeterScale(cx, cy, needleLen, isWide)
+
+            // Draw the single combined needle
             drawVintageNeedles(
                 leftLevel = leftLevel,
                 rightLevel = rightLevel,
@@ -112,6 +103,82 @@ fun VuMeter(
                 isWide = isWide
             )
         }
+    }
+}
+
+private fun DrawScope.drawMeterScale(
+    cx: Float,
+    cy: Float,
+    needleLen: Float,
+    isWide: Boolean
+) {
+    val startAngle = -142f
+    val sweepAngle = 104f
+    
+    val arcRadius = needleLen * 0.95f
+    val trackColor = Color.White.copy(alpha = 0.35f)
+    
+    val tickValues = listOf(
+        0.0f to "-20",
+        0.2f to "-10",
+        0.4f to "-5",
+        0.6f to "-3",
+        0.73f to "-1",
+        0.8f to "0",
+        0.9f to "+2",
+        1.0f to "+3"
+    )
+    
+    val paintText = android.graphics.Paint().apply {
+        textSize = needleLen * 0.08f
+        textAlign = android.graphics.Paint.Align.CENTER
+        isAntiAlias = true
+        typeface = android.graphics.Typeface.create(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD)
+    }
+
+    // Draw arc track
+    drawArc(
+        color = trackColor,
+        startAngle = startAngle,
+        sweepAngle = sweepAngle,
+        useCenter = false,
+        topLeft = Offset(cx - arcRadius, cy - arcRadius),
+        size = androidx.compose.ui.geometry.Size(arcRadius * 2, arcRadius * 2),
+        style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2f)
+    )
+
+    for ((value, label) in tickValues) {
+        val angleDeg = startAngle + value * sweepAngle
+        val angleRad = Math.toRadians(angleDeg.toDouble())
+        val cosVal = cos(angleRad).toFloat()
+        val sinVal = sin(angleRad).toFloat()
+        
+        val isRedZone = value >= 0.8f
+        val tickColor = if (isRedZone) Color(0xFFFF3D00) else Color.White.copy(alpha = 0.7f)
+        
+        val tickStartLen = arcRadius
+        val tickEndLen = arcRadius + (needleLen * 0.06f)
+        
+        drawLine(
+            color = tickColor,
+            start = Offset(cx + tickStartLen * cosVal, cy + tickStartLen * sinVal),
+            end = Offset(cx + tickEndLen * cosVal, cy + tickEndLen * sinVal),
+            strokeWidth = 3f,
+            cap = StrokeCap.Round
+        )
+        
+        val textRadius = arcRadius - (needleLen * 0.12f)
+        val textX = cx + textRadius * cosVal
+        val textY = cy + textRadius * sinVal + (paintText.textSize / 3f)
+        
+        paintText.color = if (isRedZone) android.graphics.Color.RED else android.graphics.Color.argb(200, 255, 255, 255)
+        
+        drawContext.canvas.nativeCanvas.drawText(
+            label,
+            textX,
+            textY,
+            paintText
+        )
     }
 }
 
@@ -124,16 +191,12 @@ private fun DrawScope.drawVintageNeedles(
     val w = size.width
     val h = size.height
     
-    // Pivot at bottom center of the black dial face (95% for wide, 58% for square)
     val cx = w / 2f
     val cy = h * (if (isWide) 0.95f else 0.58f)
     val needleLen = h * (if (isWide) 0.78f else 0.44f)
     
-    // Glowing amber-yellow (Left) and orange-red (Right) needles matching the TEAC dial
     val leftNeedleColor = Color(0xFFFFB300)
-    val rightNeedleColor = Color(0xFFFF3D00)
     
-    // Sweep from left (-142 deg) to right (-38 deg)
     val startAngle = -142f
     val sweepAngle = 104f
     
@@ -144,7 +207,6 @@ private fun DrawScope.drawVintageNeedles(
         val tipX = cx + (needleLen * cos(angleRad)).toFloat()
         val tipY = cy + (needleLen * sin(angleRad)).toFloat()
         
-        // Shadow for depth
         drawLine(
             color = Color.Black.copy(alpha = 0.4f),
             start = Offset(cx + 4f, cy + 4f),
@@ -153,7 +215,6 @@ private fun DrawScope.drawVintageNeedles(
             cap = StrokeCap.Round
         )
         
-        // Main needle line
         drawLine(
             color = color,
             start = Offset(cx, cy),
@@ -166,7 +227,6 @@ private fun DrawScope.drawVintageNeedles(
     val combinedLevel = maxOf(leftLevel, rightLevel)
     drawNeedle(combinedLevel, leftNeedleColor)
     
-    // Glowing light bulb center
     drawCircle(
         color = Color(0xFFFFB300).copy(alpha = 0.25f),
         radius = w * 0.04f,
