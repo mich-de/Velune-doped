@@ -8,6 +8,18 @@ import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.util.regex.Pattern
+import androidx.datastore.preferences.core.edit
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.firstOrNull
+import android.content.Context
+import org.json.JSONArray
+import org.json.JSONObject
+import com.nikhil.yt.constants.SavedSpotifyPlaylistsKey
+import com.nikhil.yt.db.MusicDatabase
+import com.nikhil.yt.db.entities.PlaylistEntity
+import com.nikhil.yt.models.toMediaMetadata
+import com.nikhil.yt.innertube.YouTube
+import com.nikhil.yt.innertube.models.SongItem
 
 object SpotifyImporter {
     private val client = OkHttpClient.Builder()
@@ -162,5 +174,121 @@ object SpotifyImporter {
             ?: track["albumName"]?.jsonPrimitive?.content
 
         return SpotifyTrack(name, artistName, album)
+    }
+
+    suspend fun savePlaylistForSync(context: Context, playlistId: String, spotifyUrl: String, playlistName: String) {
+        val prefs = context.dataStore.data.first()
+        val savedStr = prefs[SavedSpotifyPlaylistsKey] ?: ""
+        
+        val jsonArray = try {
+            JSONArray(savedStr)
+        } catch (_: Exception) {
+            JSONArray()
+        }
+
+        // Check if already registered
+        for (i in 0 until jsonArray.length()) {
+            val obj = jsonArray.optJSONObject(i) ?: continue
+            if (obj.optString("playlistId") == playlistId) {
+                // Update Spotify URL and return
+                obj.put("spotifyUrl", spotifyUrl)
+                obj.put("playlistName", playlistName)
+                context.dataStore.edit {
+                    it[SavedSpotifyPlaylistsKey] = jsonArray.toString()
+                }
+                return
+            }
+        }
+
+        // If not found, add it
+        val newObj = JSONObject().apply {
+            put("playlistId", playlistId)
+            put("spotifyUrl", spotifyUrl)
+            put("playlistName", playlistName)
+        }
+        jsonArray.put(newObj)
+        context.dataStore.edit {
+            it[SavedSpotifyPlaylistsKey] = jsonArray.toString()
+        }
+    }
+
+    suspend fun syncSavedPlaylists(context: Context, database: MusicDatabase) {
+        val prefs = context.dataStore.data.first()
+        val savedStr = prefs[SavedSpotifyPlaylistsKey] ?: ""
+        if (savedStr.isBlank()) return
+
+        val jsonArray = try {
+            JSONArray(savedStr)
+        } catch (_: Exception) {
+            return
+        }
+
+        if (jsonArray.length() == 0) return
+
+        val newSavedArray = JSONArray()
+
+        for (i in 0 until jsonArray.length()) {
+            val obj = jsonArray.optJSONObject(i) ?: continue
+            val playlistId = obj.optString("playlistId") ?: continue
+            val spotifyUrl = obj.optString("spotifyUrl") ?: continue
+
+            // 1. Check if local playlist still exists in DB
+            val playlist = database.getPlaylistById(playlistId)
+            if (playlist == null) {
+                // If it doesn't exist, skip it so it is deleted from sync list
+                continue
+            }
+
+            // Keep it in the new sync list
+            newSavedArray.put(obj)
+
+            // 2. Fetch updated tracks from Spotify
+            fetchPlaylist(spotifyUrl).onSuccess { spotifyPlaylist ->
+                val spotifyTracks = spotifyPlaylist.tracks
+                if (spotifyTracks.isEmpty()) return@onSuccess
+
+                // 3. Get songs currently in the local playlist
+                val localSongs = database.playlistSongs(playlistId).firstOrNull() ?: emptyList()
+                val localSongTitlesAndArtists = localSongs.map { 
+                    val artistsStr = it.song.artists.joinToString { artist -> artist.name }
+                    "${it.song.title.lowercase().trim()} ${artistsStr.lowercase().trim()}"
+                }.toSet()
+
+                val newTrackIds = mutableListOf<String>()
+
+                // 4. Find and match new songs
+                spotifyTracks.forEach { track ->
+                    val cleanTitle = track.title.lowercase().trim()
+                    val cleanArtist = track.artist.lowercase().trim()
+                    val searchKey = "$cleanTitle $cleanArtist"
+
+                    // If not already in local playlist, search and add it!
+                    if (!localSongTitlesAndArtists.contains(searchKey)) {
+                        val queryText = "${track.title} ${track.artist}"
+                        val searchResult = YouTube.search(queryText, YouTube.SearchFilter.FILTER_SONG)
+                        searchResult.onSuccess { search ->
+                            val bestMatch = search.items.distinctBy { it.id }.firstOrNull() as? SongItem
+                            if (bestMatch != null) {
+                                val media = bestMatch.toMediaMetadata()
+                                try {
+                                    database.insert(media)
+                                    newTrackIds.add(bestMatch.id)
+                                } catch (_: Exception) {}
+                            }
+                        }
+                    }
+                }
+
+                // 5. Add matching new tracks to the playlist
+                if (newTrackIds.isNotEmpty()) {
+                    database.addSongToPlaylist(playlist, newTrackIds)
+                }
+            }
+        }
+
+        // Save updated sync list (filtering out deleted playlists)
+        context.dataStore.edit {
+            it[SavedSpotifyPlaylistsKey] = newSavedArray.toString()
+        }
     }
 }

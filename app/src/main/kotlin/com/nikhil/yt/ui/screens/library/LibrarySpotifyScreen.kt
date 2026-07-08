@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.nikhil.yt.R
 import com.nikhil.yt.LocalPlayerAwareWindowInsets
+import androidx.compose.ui.platform.LocalConfiguration
 import com.nikhil.yt.ui.component.SpotifyImportDialog
 
 data class SpotifyRecommendedPlaylist(
@@ -52,6 +53,10 @@ fun LibrarySpotifyScreen(
     var selectedPlaylistUrl by remember { mutableStateOf("") }
     val playerAwarePadding = LocalPlayerAwareWindowInsets.current.asPaddingValues()
 
+    val configuration = LocalConfiguration.current
+    val isLandscape = configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+    val columns = if (isLandscape) GridCells.Fixed(2) else GridCells.Fixed(1)
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -59,16 +64,45 @@ fun LibrarySpotifyScreen(
     ) {
         filterContent()
         
-        Text(
-            text = "Playlist Spotify Consigliate",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-            color = MaterialTheme.colorScheme.onSurface
-        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)
+        ) {
+            Text(
+                text = "Playlist Spotify Consigliate",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            
+            Button(
+                onClick = {
+                    selectedPlaylistUrl = ""
+                    showImportDialog = true
+                },
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF1DB954),
+                    contentColor = Color.White
+                ),
+                shape = RoundedCornerShape(12.dp),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.add),
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    text = "Aggiungi",
+                    style = MaterialTheme.typography.labelMedium
+                )
+            }
+        }
 
         LazyVerticalGrid(
-            columns = GridCells.Adaptive(minSize = 160.dp),
+            columns = columns,
             contentPadding = PaddingValues(
                 start = 16.dp,
                 end = 16.dp,

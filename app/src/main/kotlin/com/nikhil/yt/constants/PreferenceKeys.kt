@@ -580,6 +580,7 @@ val GitHubReleasesFingerprintKey = stringPreferencesKey("github_releases_fingerp
 
 val TogetherOnlineEndpointCacheKey = stringPreferencesKey("together_online_endpoint_cache")
 val TogetherOnlineEndpointLastCheckedAtKey = longPreferencesKey("together_online_endpoint_last_checked_at")
+val SavedSpotifyPlaylistsKey = stringPreferencesKey("savedSpotifyPlaylists")
 
 enum class UpdateChannel {
     STABLE,

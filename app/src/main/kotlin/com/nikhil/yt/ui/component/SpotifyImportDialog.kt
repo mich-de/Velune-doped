@@ -15,6 +15,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -36,6 +37,15 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.datastore.preferences.core.edit
+import com.nikhil.yt.utils.dataStore
+import com.nikhil.yt.constants.SavedSpotifyPlaylistsKey
 import java.time.LocalDateTime
 
 @Composable
@@ -52,6 +62,8 @@ fun SpotifyImportDialog(
 
     var isImporting by remember { mutableStateOf(false) }
     var statusText by remember { mutableStateOf("") }
+    var saveForSync by remember { mutableStateOf(true) }
+
 
     fun showMessage(message: String) {
         coroutineScope.launch {
@@ -132,6 +144,10 @@ fun SpotifyImportDialog(
                     database.addSongToPlaylist(playlist, matchIds)
                 }
 
+                if (saveForSync) {
+                    SpotifyImporter.savePlaylistForSync(context, newPlaylist.id, enteredUrl, spotifyPlaylist.name)
+                }
+
                 showMessage("Importato: $matchCount su ${tracks.size} brani in '${spotifyPlaylist.name}'")
                 withContext(Dispatchers.Main) {
                     isImporting = false
@@ -148,100 +164,160 @@ fun SpotifyImportDialog(
         }
     }
 
+    LaunchedEffect(initialUrl) {
+        if (initialUrl.isNotBlank()) {
+            startImport(initialUrl)
+        }
+    }
+
     if (isVisible) {
-        TextFieldDialog(
-            icon = { Icon(painter = painterResource(R.drawable.add), contentDescription = null) },
-            title = { Text(text = "Importa da Spotify") },
-            initialTextFieldValue = TextFieldValue(initialUrl),
-            autoFocus = true,
-            onDismiss = {
-                if (!isImporting) {
-                    onDismiss()
-                }
-            },
-            extraContent = {
-                if (isImporting) {
+        if (initialUrl.isNotBlank()) {
+            AlertDialog(
+                onDismissRequest = {
+                    if (!isImporting) onDismiss()
+                },
+                confirmButton = {},
+                dismissButton = {},
+                icon = {
+                    Icon(
+                        painter = painterResource(id = R.drawable.ic_spotify),
+                        contentDescription = null,
+                        tint = Color(0xFF1DB954),
+                        modifier = Modifier.size(36.dp)
+                    )
+                },
+                title = { Text(text = "Importazione da Spotify") },
+                text = {
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp)
                     ) {
                         VeluneLoader(size = 48.dp)
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(16.dp))
                         Text(
                             text = statusText,
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                     }
-                } else {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 16.dp)
-                    ) {
-                        Text(
-                            text = "Top 50 di default:",
-                            style = MaterialTheme.typography.titleSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(bottom = 8.dp)
-                        )
-                        
-                        val shortcuts = listOf(
-                            "Top 50 Mondo" to "https://open.spotify.com/playlist/37i9dQZEVXbMDoHDwVN2tF",
-                            "Top 50 Europa" to "https://open.spotify.com/playlist/37i9dQZEVXbJ8y3M5Tq2aK",
-                            "Top 50 Sud America" to "https://open.spotify.com/playlist/37i9dQZEVXbM5d3P4F5E6c",
-                            "Top 50 Italia" to "https://open.spotify.com/playlist/37i9dQZEVXbJ8y3q7x47eF",
-                            "Top 50 Brasile" to "https://open.spotify.com/playlist/37i9dQZEVXbMXbGo2QDgPL",
-                            "Top 50 Spagna" to "https://open.spotify.com/playlist/37i9dQZEVXbNFDPnRR578v"
-                        )
-                        
-                        for (i in shortcuts.indices step 2) {
+                }
+            )
+        } else {
+            TextFieldDialog(
+                icon = { Icon(painter = painterResource(R.drawable.add), contentDescription = null) },
+                title = { Text(text = "Importa da Spotify") },
+                initialTextFieldValue = TextFieldValue(initialUrl),
+                autoFocus = true,
+                onDismiss = {
+                    if (!isImporting) {
+                        onDismiss()
+                    }
+                },
+                extraContent = {
+                    if (isImporting) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp)
+                        ) {
+                            VeluneLoader(size = 48.dp)
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = statusText,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    } else {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 16.dp)
+                        ) {
                             Row(
+                                verticalAlignment = Alignment.CenterVertically,
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(vertical = 4.dp),
-                                horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)
+                                    .clickable { saveForSync = !saveForSync }
+                                    .padding(vertical = 8.dp)
                             ) {
-                                val item1 = shortcuts[i]
-                                val item2 = shortcuts.getOrNull(i + 1)
-                                
-                                FilledTonalButton(
-                                    onClick = { startImport(item1.second) },
-                                    modifier = Modifier.weight(1f),
-                                    contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 8.dp)
+                                Checkbox(
+                                    checked = saveForSync,
+                                    onCheckedChange = { saveForSync = it }
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Sincronizza all'avvio",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                            
+                            Spacer(modifier = Modifier.height(8.dp))
+                            
+                            Text(
+                                text = "Top 50 di default:",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(bottom = 8.dp)
+                            )
+                            
+                            val shortcuts = listOf(
+                                "Top 50 Mondo" to "https://open.spotify.com/playlist/37i9dQZEVXbMDoHDwVN2tF",
+                                "Top 50 Europa" to "https://open.spotify.com/playlist/37i9dQZEVXbJ8y3M5Tq2aK",
+                                "Top 50 Sud America" to "https://open.spotify.com/playlist/37i9dQZEVXbM5d3P4F5E6c",
+                                "Top 50 Italia" to "https://open.spotify.com/playlist/37i9dQZEVXbJ8y3q7x47eF",
+                                "Top 50 Brasile" to "https://open.spotify.com/playlist/37i9dQZEVXbMXbGo2QDgPL",
+                                "Top 50 Spagna" to "https://open.spotify.com/playlist/37i9dQZEVXbNFDPnRR578v"
+                            )
+                            
+                            for (i in shortcuts.indices step 2) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 4.dp),
+                                    horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)
                                 ) {
-                                    Text(
-                                        text = item1.first,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        maxLines = 1,
-                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-                                    )
-                                }
-                                
-                                if (item2 != null) {
+                                    val item1 = shortcuts[i]
+                                    val item2 = shortcuts.getOrNull(i + 1)
+                                    
                                     FilledTonalButton(
-                                        onClick = { startImport(item2.second) },
+                                        onClick = { startImport(item1.second) },
                                         modifier = Modifier.weight(1f),
                                         contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 8.dp)
                                     ) {
                                         Text(
-                                            text = item2.first,
+                                            text = item1.first,
                                             style = MaterialTheme.typography.bodyMedium,
                                             maxLines = 1,
                                             overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                                         )
                                     }
-                                } else {
-                                    Spacer(modifier = Modifier.weight(1f))
+                                    
+                                    if (item2 != null) {
+                                        FilledTonalButton(
+                                            onClick = { startImport(item2.second) },
+                                            modifier = Modifier.weight(1f),
+                                            contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 8.dp)
+                                        ) {
+                                            Text(
+                                                text = item2.first,
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                maxLines = 1,
+                                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                            )
+                                        }
+                                    } else {
+                                        Spacer(modifier = Modifier.weight(1f))
+                                    }
                                 }
                             }
                         }
                     }
+                },
+                onDone = { enteredUrl ->
+                    startImport(enteredUrl)
                 }
-            },
-            onDone = { enteredUrl ->
-                startImport(enteredUrl)
-            }
-        )
+            )
+        }
     }
 }
