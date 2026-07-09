@@ -206,7 +206,20 @@ constructor(
             try {
                 val onlineResult = YouTube.search(q, YouTube.SearchFilter.FILTER_SONG).getOrNull()
                 val onlineSongs = onlineResult?.items?.filterIsInstance<SongItem>() ?: emptyList()
-                items += onlineSongs.map { it.toMediaItem() }
+                items += onlineSongs.map { song ->
+                    val original = song.toMediaItem()
+                    MediaItem.Builder()
+                        .setMediaId(original.mediaId)
+                        .setUri(original.localConfiguration?.uri)
+                        .setCustomCacheKey(original.localConfiguration?.customCacheKey)
+                        .setTag(original.localConfiguration?.tag)
+                        .setMediaMetadata(
+                            original.mediaMetadata.buildUpon()
+                                .setIsBrowsable(false)
+                                .setIsPlayable(true)
+                                .build()
+                        ).build()
+                }
             } catch (e: Exception) {
                 println("VeluneSearch: Online search failed: ${e.message}")
             }
