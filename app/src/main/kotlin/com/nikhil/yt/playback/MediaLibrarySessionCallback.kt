@@ -154,7 +154,16 @@ constructor(
         query: String,
         params: MediaLibraryService.LibraryParams?,
     ): ListenableFuture<LibraryResult<Void>> =
-        Futures.immediateFuture(LibraryResult.ofVoid(params))
+        scope.future(Dispatchers.IO) {
+            val q = query.trim()
+            if (q.isNotBlank()) {
+                val songsCount = database.searchSongs(q, previewSize = 50).first().size
+                val artistsCount = database.searchArtists(q, previewSize = 50).first().size
+                val totalCount = songsCount + artistsCount
+                session.notifySearchResultChanged(browser, query, totalCount, params)
+            }
+            LibraryResult.ofVoid(params)
+        }
 
     override fun onGetSearchResult(
         session: MediaLibrarySession,
