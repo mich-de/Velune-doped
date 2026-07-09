@@ -82,5 +82,5 @@
   - Fixed Android Auto online search result playback: resolved a playback failure when clicking online search items by modifying the `else` branch of `onSetMediaItems` to directly play the item if it is marked as playable.
   - Fixed integer overflow crashes in `onGetSearchResult` caused by Android Auto requesting `pageSize = Int.MAX_VALUE` by capping page and pageSize values.
   - Fixed Media3 validation crash on search results by ensuring online search result items explicitly define `isBrowsable` and `isPlayable` in their metadata.
-  - Updated `headunit.ini` with resolution `1280x720` and DPI `160` to make UI elements smaller, sharper, and fit more information on screen.
+  - Updated `headunit.ini` using the case-sensitive `[general]` section with resolution `1280x720` and DPI `120` to make UI elements smaller, sharper, and fit more information on screen.
 
