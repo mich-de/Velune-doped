@@ -135,6 +135,11 @@ private class BrowseRootScreen(carContext: CarContext) : BaseScreen(carContext) 
                 "queue"
             ))
             addItem(categoryRow(
+                "Testo",
+                R.drawable.translate,
+                "lyrics"
+            ))
+            addItem(categoryRow(
                 "Libreria",
                 R.drawable.library_music,
                 "library"
@@ -239,11 +244,37 @@ private class BrowseScreen(
             }
         }
 
-        return ListTemplate.Builder()
+        val builder = ListTemplate.Builder()
             .setTitle(title)
             .setHeaderAction(Action.BACK)
             .setSingleList(itemListBuilder.build())
-            .build()
+
+        if (parentId == "lyrics") {
+            builder.setActionStrip(
+                ActionStrip.Builder()
+                    .addAction(
+                        Action.Builder()
+                            .setTitle("Traduci")
+                            .setIcon(CarIcon.Builder(IconCompat.createWithResource(carCtx, R.drawable.translate)).build())
+                            .setOnClickListener {
+                                val browser = session?.mediaBrowser
+                                if (browser != null) {
+                                    browser.sendCustomCommand(
+                                        com.nikhil.yt.constants.MediaSessionConstants.CommandTranslateLyrics,
+                                        android.os.Bundle.EMPTY
+                                    )
+                                    isLoading = true
+                                    invalidate()
+                                    handler.postDelayed({ loadChildren() }, 3000)
+                                }
+                            }
+                            .build()
+                    )
+                    .build()
+            )
+        }
+
+        return builder.build()
     }
 
     private fun playSong(item: MediaItem) {

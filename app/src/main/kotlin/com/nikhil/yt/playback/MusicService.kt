@@ -1302,6 +1302,21 @@ class MusicService :
                     .Builder()
                     .setDisplayName(
                         getString(
+                            if (currentSong.value?.song?.inLibrary != null) {
+                                R.string.remove_from_library
+                            } else {
+                                R.string.add_to_library
+                            },
+                        ),
+                    )
+                    .setIconResId(if (currentSong.value?.song?.inLibrary != null) R.drawable.library_add_check else R.drawable.library_add)
+                    .setSessionCommand(com.nikhil.yt.constants.MediaSessionConstants.CommandToggleLibrary)
+                    .setEnabled(currentSong.value != null)
+                    .build(),
+                CommandButton
+                    .Builder()
+                    .setDisplayName(
+                        getString(
                             when (player.repeatMode) {
                                 REPEAT_MODE_OFF -> R.string.repeat_mode_off
                                 REPEAT_MODE_ONE -> R.string.repeat_mode_one

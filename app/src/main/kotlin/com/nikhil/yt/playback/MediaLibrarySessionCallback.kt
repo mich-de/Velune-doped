@@ -47,6 +47,7 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.guava.future
 import kotlinx.coroutines.plus
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 import kotlin.math.min
 
@@ -104,6 +105,7 @@ constructor(
             .add(MediaSessionConstants.CommandToggleLibrary)
             .add(MediaSessionConstants.CommandToggleShuffle)
             .add(MediaSessionConstants.CommandToggleRepeatMode)
+            .add(MediaSessionConstants.CommandTranslateLyrics)
             .add(SessionCommand(SessionCommand.COMMAND_CODE_LIBRARY_SEARCH))
             .add(SessionCommand(SessionCommand.COMMAND_CODE_LIBRARY_GET_SEARCH_RESULT))
             .add(SessionCommand(SessionCommand.COMMAND_CODE_LIBRARY_GET_CHILDREN))
@@ -133,6 +135,104 @@ constructor(
                 !session.player.shuffleModeEnabled
 
             MediaSessionConstants.ACTION_TOGGLE_REPEAT_MODE -> session.player.toggleRepeatMode()
+            MediaSessionConstants.ACTION_TRANSLATE_LYRICS -> {
+                val currentMediaItem = session.player.currentMediaItem
+                if (currentMediaItem != null) {
+                    val songId = currentMediaItem.mediaId.substringAfterLast("/")
+                    scope.launch(Dispatchers.IO) {
+                        try {
+                            val lyricsEntity = database.lyrics(songId).first()
+                            if (lyricsEntity != null && lyricsEntity.lyrics != com.nikhil.yt.db.entities.LyricsEntity.LYRICS_NOT_FOUND) {
+                                val locale = java.util.Locale.getDefault()
+                                val lang = when (locale.language.lowercase()) {
+                                    "it" -> me.bush.translator.Language.ITALIAN
+                                    "es" -> me.bush.translator.Language.SPANISH
+                                    "fr" -> me.bush.translator.Language.FRENCH
+                                    "de" -> me.bush.translator.Language.GERMAN
+                                    "pt" -> me.bush.translator.Language.PORTUGUESE
+                                    "ru" -> me.bush.translator.Language.RUSSIAN
+                                    "ja" -> me.bush.translator.Language.JAPANESE
+                                    "zh" -> me.bush.translator.Language.CHINESE_SIMPLIFIED
+                                    else -> me.bush.translator.Language.ENGLISH
+                                }
+                                val translator = me.bush.translator.Translator()
+                                val lines = lyricsEntity.lyrics.split("\n")
+                                val tsRegex = Regex("^((?:\\[[0-9]{2}:[0-9]{2}(?:\\.[0-9]+)?\\])+)")
+                                val contents = mutableListOf<String?>()
+                                val stampsFor = mutableListOf<String?>()
+                                for (line in lines) {
+                                    val trimmed = line.trimEnd()
+                                    val m = tsRegex.find(trimmed)
+                                    if (m != null) {
+                                        stampsFor.add(m.groupValues[1])
+                                        val content = trimmed.substring(m.range.last + 1).trimStart()
+                                        contents.add(if (content.isBlank()) null else content)
+                                    } else {
+                                        stampsFor.add(null)
+                                        contents.add(if (trimmed.isBlank()) null else trimmed)
+                                    }
+                                }
+                                val translatableIndices = contents.mapIndexedNotNull { idx, c -> if (c != null) idx else null }
+                                val translatedMap = mutableMapOf<Int, String>()
+                                if (translatableIndices.isNotEmpty()) {
+                                    val sep = "<<<SEP-${java.util.UUID.randomUUID()}>>>"
+                                    val maxCharsPerRequest = 4000
+                                    val maxItemsPerBatch = 50
+                                    var cursor = 0
+                                    while (cursor < translatableIndices.size) {
+                                        var currentChars = 0
+                                        val batchIndices = mutableListOf<Int>()
+                                        while (cursor < translatableIndices.size && batchIndices.size < maxItemsPerBatch) {
+                                            val idx = translatableIndices[cursor]
+                                            val pieceLen = contents[idx]!!.length
+                                            if (batchIndices.isEmpty() || currentChars + pieceLen + sep.length <= maxCharsPerRequest) {
+                                                batchIndices.add(idx)
+                                                currentChars += pieceLen + sep.length
+                                                cursor++
+                                            } else break
+                                        }
+                                        val batchTexts = batchIndices.map { contents[it]!! }
+                                        val joined = batchTexts.joinToString(separator = sep)
+                                        val translatedJoined = translator.translateBlocking(joined, lang).translatedText
+                                        val parts = translatedJoined.split(sep)
+                                        if (parts.size == batchTexts.size) {
+                                            for (i in batchIndices.indices) {
+                                                translatedMap[batchIndices[i]] = parts[i]
+                                            }
+                                        } else {
+                                            for (idx in batchIndices) {
+                                                val original = contents[idx]!!
+                                                val singleTranslated = runCatching {
+                                                    translator.translateBlocking(original, lang).translatedText
+                                                }.getOrNull() ?: original
+                                                translatedMap[idx] = singleTranslated
+                                            }
+                                        }
+                                    }
+                                }
+                                val out = mutableListOf<String>()
+                                for (i in contents.indices) {
+                                    val stamp = stampsFor[i]
+                                    val c = contents[i]
+                                    if (c == null) {
+                                        if (stamp != null) out.add(stamp) else out.add("")
+                                    } else {
+                                        val translatedText = translatedMap[i] ?: c
+                                        if (stamp != null) out.add("$stamp $translatedText") else out.add(translatedText)
+                                    }
+                                }
+                                val translatedLyrics = out.joinToString("\n")
+                                database.query {
+                                    upsert(lyricsEntity.copy(lyrics = translatedLyrics))
+                                }
+                                (session as? MediaLibraryService.MediaLibrarySession)?.notifyChildrenChanged("lyrics", out.size, MediaLibraryService.LibraryParams.Builder().build())
+                            }
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                        }
+                    }
+                }
+            }
         }
         return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
     }
@@ -339,14 +439,94 @@ constructor(
                                 browsableHint = CONTENT_STYLE_LIST_ITEM,
                             ),
                             browsableMediaItem(
-                                "library",
-                                "Libreria",
+                                MusicService.PLAYLIST,
+                                "Playlist",
                                 null,
-                                drawableUri(R.drawable.library_music),
+                                drawableUri(R.drawable.queue_music),
+                                MediaMetadata.MEDIA_TYPE_FOLDER_PLAYLISTS,
+                                browsableHint = CONTENT_STYLE_LIST_ITEM,
+                            ),
+                            browsableMediaItem(
+                                MusicService.ARTIST,
+                                "Artisti",
+                                null,
+                                drawableUri(R.drawable.artist),
+                                MediaMetadata.MEDIA_TYPE_FOLDER_ARTISTS,
+                                browsableHint = CONTENT_STYLE_LIST_ITEM,
+                            ),
+                            browsableMediaItem(
+                                MusicService.ALBUM,
+                                "Album",
+                                null,
+                                drawableUri(R.drawable.album),
+                                MediaMetadata.MEDIA_TYPE_FOLDER_ALBUMS,
+                                browsableHint = CONTENT_STYLE_LIST_ITEM,
+                            ),
+                            browsableMediaItem(
+                                MusicService.SONG,
+                                "Brani",
+                                null,
+                                drawableUri(R.drawable.music_note),
+                                MediaMetadata.MEDIA_TYPE_PLAYLIST,
+                                browsableHint = CONTENT_STYLE_LIST_ITEM,
+                            ),
+                            browsableMediaItem(
+                                "lyrics",
+                                "Testo",
+                                null,
+                                drawableUri(R.drawable.translate),
                                 MediaMetadata.MEDIA_TYPE_FOLDER_MIXED,
                                 browsableHint = CONTENT_STYLE_LIST_ITEM,
                             ),
                         )
+
+                    "lyrics" -> {
+                        val currentMediaItem = session.player.currentMediaItem
+                        if (currentMediaItem == null) {
+                            listOf(
+                                MediaItem.Builder()
+                                    .setMediaId("lyrics/no_track")
+                                    .setMediaMetadata(
+                                        MediaMetadata.Builder()
+                                            .setTitle("Nessun brano in riproduzione")
+                                            .setIsBrowsable(false)
+                                            .setIsPlayable(false)
+                                            .build()
+                                    ).build()
+                            )
+                        } else {
+                            val songId = currentMediaItem.mediaId.substringAfterLast("/")
+                            val lyricsEntity = database.lyrics(songId).first()
+                            if (lyricsEntity == null || lyricsEntity.lyrics == com.nikhil.yt.db.entities.LyricsEntity.LYRICS_NOT_FOUND) {
+                                listOf(
+                                    MediaItem.Builder()
+                                        .setMediaId("lyrics/not_found")
+                                        .setMediaMetadata(
+                                            MediaMetadata.Builder()
+                                                .setTitle("Testo non trovato")
+                                                .setIsBrowsable(false)
+                                                .setIsPlayable(false)
+                                                .build()
+                                        ).build()
+                                )
+                            } else {
+                                val lines = lyricsEntity.lyrics.split("\n")
+                                    .map { it.trim() }
+                                    .filter { it.isNotEmpty() }
+                                lines.mapIndexed { index, line ->
+                                    MediaItem.Builder()
+                                        .setMediaId("lyrics/line_$index")
+                                        .setMediaMetadata(
+                                            MediaMetadata.Builder()
+                                                .setTitle(line)
+                                                .setIsBrowsable(false)
+                                                .setIsPlayable(false)
+                                                .build()
+                                        ).build()
+                                }
+                            }
+                        }
+                    }
 
                     "library" ->
                         listOf(
@@ -584,6 +764,18 @@ constructor(
                             "Libreria",
                             null,
                             drawableUri(R.drawable.library_music),
+                            MediaMetadata.MEDIA_TYPE_FOLDER_MIXED,
+                        ),
+                        null,
+                    )
+
+                mediaId == "lyrics" ->
+                    LibraryResult.ofItem(
+                        browsableMediaItem(
+                            "lyrics",
+                            "Testo",
+                            null,
+                            drawableUri(R.drawable.translate),
                             MediaMetadata.MEDIA_TYPE_FOLDER_MIXED,
                         ),
                         null,
