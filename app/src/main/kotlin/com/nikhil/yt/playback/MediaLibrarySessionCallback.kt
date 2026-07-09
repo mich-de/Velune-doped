@@ -300,6 +300,22 @@ constructor(
                                 browsableHint = CONTENT_STYLE_LIST_ITEM,
                             ),
                             browsableMediaItem(
+                                MusicService.RECENT,
+                                context.getString(R.string.history),
+                                null,
+                                drawableUri(R.drawable.history),
+                                MediaMetadata.MEDIA_TYPE_PLAYLIST,
+                                browsableHint = CONTENT_STYLE_LIST_ITEM,
+                            ),
+                            browsableMediaItem(
+                                MusicService.QUEUE,
+                                context.getString(R.string.queue),
+                                null,
+                                drawableUri(R.drawable.queue_music),
+                                MediaMetadata.MEDIA_TYPE_PLAYLIST,
+                                browsableHint = CONTENT_STYLE_LIST_ITEM,
+                            ),
+                            browsableMediaItem(
                                 MusicService.SONG,
                                 context.getString(R.string.songs),
                                 null,
@@ -348,6 +364,7 @@ constructor(
                                 ),
                                 artist.artist.thumbnailUrl?.toUri(),
                                 MediaMetadata.MEDIA_TYPE_ARTIST,
+                                browsableHint = CONTENT_STYLE_GRID_ITEM,
                             )
                         }
 
@@ -361,6 +378,7 @@ constructor(
                                 },
                                 album.album.thumbnailUrl?.toUri(),
                                 MediaMetadata.MEDIA_TYPE_ALBUM,
+                                browsableHint = CONTENT_STYLE_GRID_ITEM,
                             )
                         }
 
@@ -378,6 +396,7 @@ constructor(
                                 ),
                                 drawableUri(R.drawable.favorite),
                                 MediaMetadata.MEDIA_TYPE_PLAYLIST,
+                                browsableHint = CONTENT_STYLE_LIST_ITEM,
                             ),
                             browsableMediaItem(
                                 "${MusicService.PLAYLIST}/${PlaylistEntity.DOWNLOADED_PLAYLIST_ID}",
@@ -389,6 +408,7 @@ constructor(
                                 ),
                                 drawableUri(R.drawable.download),
                                 MediaMetadata.MEDIA_TYPE_PLAYLIST,
+                                browsableHint = CONTENT_STYLE_LIST_ITEM,
                             ),
                         ) +
                                 database.playlistsByCreateDateAsc().first().map { playlist ->
@@ -402,8 +422,33 @@ constructor(
                                         ),
                                         playlist.thumbnails.firstOrNull()?.toUri(),
                                         MediaMetadata.MEDIA_TYPE_PLAYLIST,
+                                        browsableHint = CONTENT_STYLE_GRID_ITEM,
                                     )
                                 }
+                    }
+
+                    MusicService.RECENT -> {
+                        val events = database.events().first()
+                        val uniqueSongs = events.distinctBy { it.event.songId }.map { it.song }
+                        uniqueSongs.take(50).map { it.toMediaItemWithPath(parentId) }
+                    }
+
+                    MusicService.QUEUE -> {
+                        val player = session.player
+                        val list = mutableListOf<MediaItem>()
+                        for (i in 0 until player.mediaItemCount) {
+                            val originalItem = player.getMediaItemAt(i)
+                            val item = MediaItem.Builder()
+                                .setMediaId("${MusicService.QUEUE}/${originalItem.mediaId}")
+                                .setMediaMetadata(
+                                    originalItem.mediaMetadata.buildUpon()
+                                        .setIsPlayable(true)
+                                        .setIsBrowsable(false)
+                                        .build()
+                                ).build()
+                            list.add(item)
+                        }
+                        list
                     }
 
                     else ->
@@ -536,6 +581,61 @@ constructor(
                         ),
                         null,
                     )
+
+                mediaId == MusicService.RECENT ->
+                    LibraryResult.ofItem(
+                        browsableMediaItem(
+                            MusicService.RECENT,
+                            context.getString(R.string.history),
+                            null,
+                            drawableUri(R.drawable.history),
+                            MediaMetadata.MEDIA_TYPE_PLAYLIST,
+                        ),
+                        null,
+                    )
+
+                mediaId == MusicService.QUEUE ->
+                    LibraryResult.ofItem(
+                        browsableMediaItem(
+                            MusicService.QUEUE,
+                            context.getString(R.string.queue),
+                            null,
+                            drawableUri(R.drawable.queue_music),
+                            MediaMetadata.MEDIA_TYPE_PLAYLIST,
+                        ),
+                        null,
+                    )
+
+                mediaId.startsWith("${MusicService.RECENT}/") ->
+                    database.song(mediaId.removePrefix("${MusicService.RECENT}/")).first()?.let {
+                        LibraryResult.ofItem(it.toMediaItemWithPath(MusicService.RECENT), null)
+                    } ?: LibraryResult.ofError(SessionError.ERROR_UNKNOWN)
+
+                mediaId.startsWith("${MusicService.QUEUE}/") -> {
+                    val songId = mediaId.removePrefix("${MusicService.QUEUE}/")
+                    val player = session.player
+                    var foundItem: MediaItem? = null
+                    for (i in 0 until player.mediaItemCount) {
+                        val item = player.getMediaItemAt(i)
+                        if (item.mediaId == songId || item.mediaId.endsWith("/$songId")) {
+                            foundItem = item
+                            break
+                        }
+                    }
+                    foundItem?.let {
+                        LibraryResult.ofItem(
+                            MediaItem.Builder()
+                                .setMediaId(mediaId)
+                                .setMediaMetadata(
+                                    it.mediaMetadata.buildUpon()
+                                        .setIsPlayable(true)
+                                        .setIsBrowsable(false)
+                                        .build()
+                                ).build(),
+                            null
+                        )
+                    } ?: LibraryResult.ofError(SessionError.ERROR_UNKNOWN)
+                }
 
                 mediaId.startsWith("${MusicService.SONG}/") ->
                     database.song(mediaId.removePrefix("${MusicService.SONG}/")).first()?.let {
@@ -692,6 +792,37 @@ constructor(
                     } else 0
                     MediaSession.MediaItemsWithStartPosition(
                         songs.map { it.toMediaItem() },
+                        index,
+                        startPositionMs,
+                    )
+                }
+
+                MusicService.RECENT -> {
+                    val songId = path.getOrNull(1)
+                    val events = database.events().first()
+                    val uniqueSongs = events.distinctBy { it.event.songId }.map { it.song }
+                    val index = if (songId != null) {
+                        uniqueSongs.indexOfFirst { it.id == songId }.takeIf { it != -1 } ?: 0
+                    } else 0
+                    MediaSession.MediaItemsWithStartPosition(
+                        uniqueSongs.map { it.toMediaItem() },
+                        index,
+                        startPositionMs,
+                    )
+                }
+
+                MusicService.QUEUE -> {
+                    val songId = path.getOrNull(1)
+                    val currentItems = mutableListOf<MediaItem>()
+                    val player = mediaSession.player
+                    for (i in 0 until player.mediaItemCount) {
+                        currentItems.add(player.getMediaItemAt(i))
+                    }
+                    val index = if (songId != null) {
+                        currentItems.indexOfFirst { it.mediaId == songId || it.mediaId.endsWith("/$songId") }.takeIf { it != -1 } ?: 0
+                    } else player.currentMediaItemIndex
+                    MediaSession.MediaItemsWithStartPosition(
+                        currentItems,
                         index,
                         startPositionMs,
                     )

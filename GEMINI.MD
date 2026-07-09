@@ -74,3 +74,9 @@
   - Optimized **Crossfade Playback & Now Playing UI**:
     - Resolved crossfade abrupt cutting bugs inside [CrossfadeAudio.kt](file:///D:/android_player/app/src/main/kotlin/com/nikhil/yt/playback/CrossfadeAudio.kt) by delaying next-track audio playback (`playWhenReady = false`) during background buffering to avoid AudioTrack conflicts, and expanded seek sync intervals/tolerances (3s interval, 800ms threshold) to prevent rapid seek storms.
     - Added direct quick-action buttons for the **Sleep Timer** (`bedtime` moon icon) and **Equalizer** (`equalizer` sliders icon) in the action bar of [PlayerComponents.kt](file:///D:/android_player/app/src/main/kotlin/com/nikhil/yt/ui/player/PlayerComponents.kt), positioning the `...` menu as the final element in the row.
+- **2026-07-09**: Implemented Android Auto UX Enhancements and DHU launch:
+  - Added new root-level categories for immediate vehicle access: **Recently Played** (mapped to Room database `event` table, displaying unique, chronologically ordered played tracks) and **Current Queue** (mapped to the Media3 Player queue, letting users view and switch upcoming tracks directly from Android Auto).
+  - Configured Albums, Artists, and User Playlists folders to display as **Grid Items** (`CONTENT_STYLE_GRID_ITEM`) to take advantage of album covers and artist thumbnails on spacious vehicle displays, while keeping root category folders as lists.
+  - Added playback routing for the new `recent` and `queue` categories inside `onSetMediaItems` to support folder-level playback and index seeking.
+  - Configured port forwarding (`adb forward tcp:5277 tcp:5277`) and launched the Android Auto **Desktop Head Unit (DHU)** emulator.
+
