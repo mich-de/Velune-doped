@@ -61,7 +61,7 @@ constructor(
     var toggleLibrary: () -> Unit = {}
 
     private fun browsableExtras(
-        browsableHint: Int = CONTENT_STYLE_GRID_ITEM,
+        browsableHint: Int = CONTENT_STYLE_LIST_ITEM,
         playableHint: Int = CONTENT_STYLE_LIST_ITEM,
     ) = Bundle().apply {
         putBoolean(EXTRA_CONTENT_STYLE_SUPPORTED, true)
@@ -693,7 +693,7 @@ constructor(
         subtitle: String?,
         iconUri: Uri?,
         mediaType: Int = MediaMetadata.MEDIA_TYPE_MUSIC,
-        browsableHint: Int = CONTENT_STYLE_GRID_ITEM,
+        browsableHint: Int = CONTENT_STYLE_LIST_ITEM,
         playableHint: Int = CONTENT_STYLE_LIST_ITEM,
     ) = MediaItem
         .Builder()
