@@ -195,7 +195,9 @@ constructor(
                 return@future LibraryResult.ofItemList(emptyList(), params)
             }
 
-            val requested = (page + 1) * pageSize
+            val cleanPageSize = if (pageSize > 100) 100 else pageSize
+            val cleanPage = if (page > 10) 10 else page
+            val requested = (cleanPage + 1) * cleanPageSize
             val items = ArrayList<MediaItem>(min(requested, 200))
 
             val songs = database.searchSongs(q, previewSize = requested).first()
@@ -262,9 +264,9 @@ constructor(
                     }
             }
 
-            val from = page * pageSize
+            val from = cleanPage * cleanPageSize
             if (from >= items.size) return@future LibraryResult.ofItemList(emptyList(), params)
-            val to = min(from + pageSize, items.size)
+            val to = min(from + cleanPageSize, items.size)
 
             LibraryResult.ofItemList(items.subList(from, to), params)
         }
