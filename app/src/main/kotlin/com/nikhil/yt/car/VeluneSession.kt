@@ -115,29 +115,24 @@ private class BrowseRootScreen(carContext: CarContext) : BaseScreen(carContext) 
 
         val itemList = ItemList.Builder().apply {
             addItem(categoryRow(
-                carCtx.getString(R.string.liked_songs),
+                "Preferiti",
                 R.drawable.favorite,
                 "playlists/0"
             ))
             addItem(categoryRow(
-                carCtx.getString(R.string.songs),
-                R.drawable.music_note,
-                "songs"
+                "Scaricate",
+                R.drawable.download,
+                "playlists/2"
             ))
             addItem(categoryRow(
-                carCtx.getString(R.string.artists),
-                R.drawable.artist,
-                "artists"
+                "Storia",
+                R.drawable.history,
+                "recent"
             ))
             addItem(categoryRow(
-                carCtx.getString(R.string.albums),
-                R.drawable.album,
-                "albums"
-            ))
-            addItem(categoryRow(
-                carCtx.getString(R.string.playlists),
-                R.drawable.queue_music,
-                "playlists"
+                "Libreria",
+                R.drawable.library_music,
+                "library"
             ))
         }.build()
 
