@@ -31,7 +31,11 @@ import com.google.common.util.concurrent.ListenableFuture
 import com.nikhil.yt.R
 import com.nikhil.yt.extensions.toMediaItem
 import com.nikhil.yt.innertube.YouTube
+import com.nikhil.yt.innertube.models.AlbumItem
+import com.nikhil.yt.innertube.models.ArtistItem
+import com.nikhil.yt.innertube.models.PlaylistItem
 import com.nikhil.yt.innertube.models.SongItem
+import com.nikhil.yt.innertube.models.YTItem
 import com.nikhil.yt.constants.MediaSessionConstants
 import com.nikhil.yt.constants.SongSortType
 import com.nikhil.yt.db.MusicDatabase
@@ -308,28 +312,63 @@ constructor(
             items += songs.map { it.toMediaItemWithPath(MusicService.SONG) }
 
             try {
-                val onlineResult = YouTube.search(q, YouTube.SearchFilter.FILTER_SONG)
-                if (onlineResult.isFailure) {
-                    println("VeluneSearch: onGetSearchResult online search failed: ${onlineResult.exceptionOrNull()?.message}")
-                    onlineResult.exceptionOrNull()?.printStackTrace()
-                }
-                val onlineSongs = onlineResult.getOrNull()?.items?.filterIsInstance<SongItem>() ?: emptyList()
-                items += onlineSongs.map { song ->
-                    val original = song.toMediaItem()
-                    MediaItem.Builder()
-                        .setMediaId(original.mediaId)
-                        .setUri(original.localConfiguration?.uri)
-                        .setCustomCacheKey(original.localConfiguration?.customCacheKey)
-                        .setTag(original.localConfiguration?.tag)
-                        .setMediaMetadata(
-                            original.mediaMetadata.buildUpon()
-                                .setIsBrowsable(false)
-                                .setIsPlayable(true)
-                                .build()
-                        ).build()
+                val onlineResult = YouTube.searchSummary(q)
+                if (onlineResult.isSuccess) {
+                    val summaryPage = onlineResult.getOrNull()
+                    if (summaryPage != null) {
+                        val allItems = summaryPage.summaries.flatMap { it.items }
+                        for (ytItem in allItems) {
+                            when (ytItem) {
+                                is SongItem -> {
+                                    val original = ytItem.toMediaItem()
+                                    items += MediaItem.Builder()
+                                        .setMediaId(original.mediaId)
+                                        .setUri(original.localConfiguration?.uri)
+                                        .setCustomCacheKey(original.localConfiguration?.customCacheKey)
+                                        .setTag(original.localConfiguration?.tag)
+                                        .setMediaMetadata(
+                                            original.mediaMetadata.buildUpon()
+                                                .setIsBrowsable(false)
+                                                .setIsPlayable(true)
+                                                .build()
+                                        ).build()
+                                }
+                                is AlbumItem -> {
+                                    items += browsableMediaItem(
+                                        "${MusicService.ALBUM}/${ytItem.id}",
+                                        ytItem.title,
+                                        ytItem.artists?.joinToString { it.name } ?: "",
+                                        ytItem.thumbnail.toUri(),
+                                        MediaMetadata.MEDIA_TYPE_ALBUM,
+                                        browsableHint = CONTENT_STYLE_LIST_ITEM
+                                    )
+                                }
+                                is ArtistItem -> {
+                                    items += browsableMediaItem(
+                                        "${MusicService.ARTIST}/${ytItem.id}",
+                                        ytItem.title,
+                                        "Artist",
+                                        ytItem.thumbnail?.toUri(),
+                                        MediaMetadata.MEDIA_TYPE_ARTIST,
+                                        browsableHint = CONTENT_STYLE_LIST_ITEM
+                                    )
+                                }
+                                is PlaylistItem -> {
+                                    items += browsableMediaItem(
+                                        "${MusicService.PLAYLIST}/${ytItem.id}",
+                                        ytItem.title,
+                                        ytItem.author?.name ?: "",
+                                        ytItem.thumbnail?.toUri(),
+                                        MediaMetadata.MEDIA_TYPE_PLAYLIST,
+                                        browsableHint = CONTENT_STYLE_LIST_ITEM
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
             } catch (e: Exception) {
-                println("VeluneSearch: Online search failed: ${e.message}")
+                println("VeluneSearch: Online search summary failed: ${e.message}")
             }
 
             if (items.size < requested) {
@@ -676,52 +715,100 @@ constructor(
 
                     else ->
                         when {
-                            parentId.startsWith("${MusicService.ARTIST}/") ->
-                                database.artistSongsByCreateDateAsc(parentId.removePrefix("${MusicService.ARTIST}/"))
-                                    .first().map {
-                                    it.toMediaItemWithPath(parentId)
+                            parentId.startsWith("${MusicService.ARTIST}/") -> {
+                                val artistId = parentId.removePrefix("${MusicService.ARTIST}/")
+                                val localSongs = database.artistSongsByCreateDateAsc(artistId).first()
+                                if (localSongs.isNotEmpty()) {
+                                    localSongs.map { it.toMediaItemWithPath(parentId) }
+                                } else {
+                                    val onlineResult = YouTube.artist(artistId)
+                                    val onlineSongs = onlineResult.getOrNull()?.sections?.flatMap { it.items }?.filterIsInstance<SongItem>() ?: emptyList()
+                                    onlineSongs.map { song ->
+                                        val original = song.toMediaItem()
+                                        MediaItem.Builder()
+                                            .setMediaId(original.mediaId)
+                                            .setUri(original.localConfiguration?.uri)
+                                            .setCustomCacheKey(original.localConfiguration?.customCacheKey)
+                                            .setTag(original.localConfiguration?.tag)
+                                            .setMediaMetadata(
+                                                original.mediaMetadata.buildUpon()
+                                                    .setIsBrowsable(false)
+                                                    .setIsPlayable(true)
+                                                    .build()
+                                            ).build()
+                                    }
                                 }
+                            }
 
-                            parentId.startsWith("${MusicService.ALBUM}/") ->
-                                database.albumSongs(parentId.removePrefix("${MusicService.ALBUM}/"))
-                                    .first().map {
-                                    it.toMediaItemWithPath(parentId)
+                            parentId.startsWith("${MusicService.ALBUM}/") -> {
+                                val albumId = parentId.removePrefix("${MusicService.ALBUM}/")
+                                val localSongs = database.albumSongs(albumId).first()
+                                if (localSongs.isNotEmpty()) {
+                                    localSongs.map { it.toMediaItemWithPath(parentId) }
+                                } else {
+                                    val onlineResult = YouTube.album(albumId)
+                                    val onlineSongs = onlineResult.getOrNull()?.songs ?: emptyList()
+                                    onlineSongs.map { song ->
+                                        val original = song.toMediaItem()
+                                        MediaItem.Builder()
+                                            .setMediaId(original.mediaId)
+                                            .setUri(original.localConfiguration?.uri)
+                                            .setCustomCacheKey(original.localConfiguration?.customCacheKey)
+                                            .setTag(original.localConfiguration?.tag)
+                                            .setMediaMetadata(
+                                                original.mediaMetadata.buildUpon()
+                                                    .setIsBrowsable(false)
+                                                    .setIsPlayable(true)
+                                                    .build()
+                                            ).build()
+                                    }
                                 }
+                            }
 
-                            parentId.startsWith("${MusicService.PLAYLIST}/") ->
-                                when (val playlistId =
-                                    parentId.removePrefix("${MusicService.PLAYLIST}/")) {
+                            parentId.startsWith("${MusicService.PLAYLIST}/") -> {
+                                val playlistId = parentId.removePrefix("${MusicService.PLAYLIST}/")
+                                when (playlistId) {
                                     PlaylistEntity.LIKED_PLAYLIST_ID -> database.likedSongs(
                                         SongSortType.CREATE_DATE,
                                         true
-                                    )
+                                    ).first().map { it.toMediaItemWithPath(parentId) }
 
                                     PlaylistEntity.DOWNLOADED_PLAYLIST_ID -> {
                                         val downloads = downloadUtil.downloads.value
-                                        database
-                                            .allSongs()
-                                            .flowOn(Dispatchers.IO)
-                                            .map { songs ->
-                                                songs.filter {
-                                                    downloads[it.id]?.state == Download.STATE_COMPLETED
-                                                }
-                                            }.map { songs ->
-                                                songs
-                                                    .map { it to downloads[it.id] }
-                                                    .sortedBy { it.second?.updateTimeMs ?: 0L }
-                                                    .map { it.first }
-                                            }
+                                        database.allSongs().flowOn(Dispatchers.IO).map { songs ->
+                                            songs.filter { downloads[it.id]?.state == Download.STATE_COMPLETED }
+                                        }.map { songs ->
+                                            songs.map { it to downloads[it.id] }.sortedBy { it.second?.updateTimeMs ?: 0L }.map { it.first }
+                                        }.first().map { it.toMediaItemWithPath(parentId) }
                                     }
 
-                                    else ->
-                                        database.playlistSongs(playlistId).map { list ->
-                                            list.map { it.song }
+                                    else -> {
+                                        val localSongs = database.playlistSongs(playlistId).first().map { it.song }
+                                        if (localSongs.isNotEmpty()) {
+                                            localSongs.map { it.toMediaItemWithPath(parentId) }
+                                        } else {
+                                            val onlineResult = YouTube.playlist(playlistId)
+                                            val onlineSongs = onlineResult.getOrNull()?.songs ?: emptyList()
+                                            onlineSongs.map { song ->
+                                                val original = song.toMediaItem()
+                                                MediaItem.Builder()
+                                                    .setMediaId(original.mediaId)
+                                                    .setUri(original.localConfiguration?.uri)
+                                                    .setCustomCacheKey(original.localConfiguration?.customCacheKey)
+                                                    .setTag(original.localConfiguration?.tag)
+                                                    .setMediaMetadata(
+                                                        original.mediaMetadata.buildUpon()
+                                                            .setIsBrowsable(false)
+                                                            .setIsPlayable(true)
+                                                            .build()
+                                                    ).build()
+                                            }
                                         }
-                                }.first().map {
-                                    it.toMediaItemWithPath(parentId)
+                                    }
                                 }
+                            }
 
-                              else -> emptyList()
+                            else -> emptyList()
                         }
                 }
                 println("VeluneBrowse: returning ${list.size} children for parentId='$parentId'")
