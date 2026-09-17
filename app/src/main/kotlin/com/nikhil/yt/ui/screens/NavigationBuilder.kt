@@ -72,6 +72,8 @@ import com.nikhil.yt.ui.screens.settings.VeluneAccountSettingsScreen
 import com.nikhil.yt.ui.screens.settings.ChangelogScreen
 import com.nikhil.yt.ui.screens.settings.ContentSettings
 import com.nikhil.yt.ui.screens.settings.DarkMode
+import com.nikhil.yt.ui.screens.settings.DeezerLoginScreen
+import com.nikhil.yt.ui.screens.settings.DeezerGenerateScreen
 import com.nikhil.yt.ui.screens.settings.DiscordLoginScreen
 import com.nikhil.yt.ui.screens.settings.DiscordSettings
 import com.nikhil.yt.ui.screens.settings.DebugSettings
@@ -353,6 +355,12 @@ fun NavGraphBuilder.navigationBuilder(
     }
     composable("settings/discord/login") {
         DiscordLoginScreen(navController)
+    }
+    composable("settings/deezer/login") {
+        DeezerLoginScreen(navController)
+    }
+    composable("settings/deezer/generate") {
+        DeezerGenerateScreen(navController)
     }
     composable("settings/about") {
         AboutScreen(navController, scrollBehavior)

@@ -16,7 +16,28 @@ data class LoginResponse(
 @Serializable
 data class LoginResults(
     val checkForm: String = "",
+    val USER_TOKEN: String = "",
     val USER: LoginUser? = null,
+)
+
+@Serializable
+data class CreateAccountResponse(
+    val results: CreateAccountResults? = null,
+    val error: JsonElement? = null,
+) {
+    fun errorMessage(): String = error?.toString() ?: ""
+}
+
+@Serializable
+data class CreateAccountResults(
+    val arl: String = "",
+)
+
+data class GeneratedArl(
+    val arl: String,
+    val email: String,
+    val password: String,
+    val username: String,
 )
 
 @Serializable

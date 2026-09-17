@@ -121,7 +121,7 @@ import com.nikhil.yt.playback.EqCapabilities
 import com.nikhil.yt.playback.EqProfile
 import com.nikhil.yt.playback.EqProfilesPayload
 import com.nikhil.yt.playback.EqualizerJson
-import com.nikhil.yt.deezer.Deezer
+import com.nikhil.yt.ui.deezer.downloadFromDeezer
 import com.nikhil.yt.playback.ExoDownloadService
 import com.nikhil.yt.playback.queues.YouTubeQueue
 import com.nikhil.yt.ui.component.BottomSheetState
@@ -131,9 +131,7 @@ import com.nikhil.yt.ui.component.NewAction
 import com.nikhil.yt.ui.component.NewActionGrid
 import com.nikhil.yt.ui.component.TextFieldDialog
 import com.nikhil.yt.utils.rememberPreference
-import android.content.ContentValues
 import android.os.Build
-import android.provider.MediaStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlin.math.abs
@@ -659,43 +657,14 @@ fun PlayerMenu(
                                 return@clickable
                             }
                             coroutineScope.launch {
-                                Deezer.setLogDir(context.cacheDir)
-                                try {
-                                    Deezer.setArl(deezerArl)
-                                    val loginResult = Deezer.login()
-                                    loginResult.onFailure {
-                                        Toast.makeText(context, "Deezer: Login failed - ${it.message}", Toast.LENGTH_LONG).show()
-                                        return@launch
-                                    }
-                                    val cacheDir = context.cacheDir.resolve("deezer_tmp")
-                                    val title = mediaMetadata.title
-                                    val artist = mediaMetadata.artists.joinToString(", ") { it.name }
-                                    val result = Deezer.searchAndDownload(title, artist, cacheDir, deezerQuality)
-                                    result.onSuccess { file ->
-                                        val values = ContentValues().apply {
-                                            put(MediaStore.Audio.Media.DISPLAY_NAME, file.name)
-                                            put(MediaStore.Audio.Media.MIME_TYPE, "audio/mpeg")
-                                            put(MediaStore.Audio.Media.RELATIVE_PATH, "Music/Deezer")
-                                            put(MediaStore.Audio.Media.IS_PENDING, 1)
-                                        }
-                                        val uri = context.contentResolver.insert(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, values)
-                                        if (uri != null) {
-                                            context.contentResolver.openOutputStream(uri)?.use { out ->
-                                                file.inputStream().use { it.copyTo(out) }
-                                            }
-                                            values.clear()
-                                            values.put(MediaStore.Audio.Media.IS_PENDING, 0)
-                                            context.contentResolver.update(uri, values, null, null)
-                                        }
-                                        file.delete()
-                                        Toast.makeText(context, "Saved: ${file.name} → Music/Deezer/", Toast.LENGTH_SHORT).show()
-                                        onDismiss()
-                                    }.onFailure {
-                                        Toast.makeText(context, "Deezer: ${it.message}", Toast.LENGTH_LONG).show()
-                                    }
-                                } catch (e: Exception) {
-                                    Toast.makeText(context, "Deezer: ${e.javaClass.simpleName}: ${e.message}", Toast.LENGTH_LONG).show()
-                                }
+                                downloadFromDeezer(
+                                    context = context,
+                                    arl = deezerArl,
+                                    quality = deezerQuality,
+                                    title = mediaMetadata.title,
+                                    artist = mediaMetadata.artists.joinToString(", ") { it.name },
+                                    onDownloaded = onDismiss,
+                                )
                             }
                         },
                         colors = ListItemDefaults.colors(containerColor = Color.Transparent),

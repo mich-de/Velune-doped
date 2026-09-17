@@ -1,9 +1,11 @@
 package com.nikhil.yt.deezer
 
 import com.nikhil.yt.deezer.crypto.StripeDecryptor
+import com.nikhil.yt.deezer.models.CreateAccountResponse
 import com.nikhil.yt.deezer.models.DeezerJson
 import com.nikhil.yt.deezer.models.DeezerTrack
 import com.nikhil.yt.deezer.models.DeezerTrackRs
+import com.nikhil.yt.deezer.models.GeneratedArl
 import com.nikhil.yt.deezer.models.LoginResponse
 import com.nikhil.yt.deezer.models.MediaResponse
 import com.nikhil.yt.deezer.models.SearchResponse
@@ -26,6 +28,7 @@ import io.ktor.serialization.kotlinx.json.json
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
+import kotlin.random.Random
 
 object Deezer {
     private const val GW_URL = "https://www.deezer.com/ajax/gw-light.php"
@@ -118,6 +121,63 @@ object Deezer {
         licenseToken = newLicenseToken
         loggedIn = true
         log("Login OK")
+    }
+
+    /**
+     * Generates a brand-new Deezer ARL by creating a fresh account via the
+     * `user.create` gw-light method. Ported from the d33z3r register-final.js
+     * flow: get an anonymous API token, then call user.create with random
+     * credentials and read the returned `arl`.
+     */
+    suspend fun generateArl(): Result<GeneratedArl> = runCatching {
+        val rnd = Random
+        fun randomString(len: Int): String {
+            val chars = "abcdefghijklmnopqrstuvwxyz0123456789"
+            return (1..len).map { chars[rnd.nextInt(chars.length)] }.joinToString("")
+        }
+        val email = "deezerbot${randomString(8)}@outlook.com"
+        val password = "Dz${randomString(10)}!A1"
+        val username = "dzuser${randomString(6)}"
+        log("generateArl: creating account email=$email username=$username")
+
+        // 1. Fetch anonymous API token via deezer.getUserData
+        val cid = rnd.nextInt(999999)
+        val userDataUrl = "$GW_URL?method=deezer.getUserData&input=3&api_version=1.0&api_token=&cid=$cid"
+        log("generateArl: POST $userDataUrl")
+        val userDataResponse = client.post(userDataUrl) {
+            header("User-Agent", USER_AGENT)
+            contentType(ContentType.Application.Json)
+            setBody("""{"APP_NAME":"Deezer"}""")
+        }
+        val userDataBody = userDataResponse.bodyAsText()
+        val userData = DeezerJson.json.decodeFromString<LoginResponse>(userDataBody)
+        val apiToken = userData.results.USER_TOKEN
+        log("generateArl: apiToken=${apiToken.take(30)}...")
+        require(apiToken.isNotEmpty()) { "No API token returned. Body: ${userDataBody.take(300)}" }
+
+        // 2. Create account -> returns arl
+        val createUrl = "$GW_URL?method=user.create&input=3&api_version=1.0&api_token=$apiToken&cid=${rnd.nextInt(999999)}"
+        log("generateArl: POST $createUrl")
+        val createResponse = client.post(createUrl) {
+            header("User-Agent", USER_AGENT)
+            contentType(ContentType.Application.Json)
+            setBody(
+                """{"APP_NAME":"Deezer","EMAIL":"$email","PASSWORD":"$password","BLOG_NAME":"$username","SEX":"M","BIRTHDAY":"1995-06-15","JOURNEY_VERSION":"unlogged_smart_and_login_web_v1"}"""
+            )
+        }
+        val createBody = createResponse.bodyAsText()
+        log("generateArl: create response len=${createBody.length} preview=${createBody.take(300)}")
+        val create = DeezerJson.json.decodeFromString<CreateAccountResponse>(createBody)
+        val newArl = create.results?.arl
+        require(!newArl.isNullOrEmpty()) { "Account creation failed: ${create.errorMessage()} Body: ${createBody.take(300)}" }
+        log("generateArl: OK arl=${newArl.take(20)}...")
+
+        GeneratedArl(
+            arl = newArl,
+            email = email,
+            password = password,
+            username = username,
+        )
     }
 
     suspend fun search(title: String, artist: String, limit: Int = 20): List<DeezerTrack> {

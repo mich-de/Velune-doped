@@ -77,12 +77,10 @@ import androidx.media3.exoplayer.offline.DownloadRequest
 import androidx.media3.exoplayer.offline.DownloadService
 import androidx.navigation.NavController
 import coil3.compose.AsyncImage
-import android.content.ContentValues
-import android.provider.MediaStore
 import com.nikhil.yt.constants.DeezerArlKey
 import com.nikhil.yt.constants.DeezerQualityKey
 import com.nikhil.yt.constants.EnableDeezerKey
-import com.nikhil.yt.deezer.Deezer
+import com.nikhil.yt.ui.deezer.downloadFromDeezer
 import com.nikhil.yt.innertube.YouTube
 import com.nikhil.yt.LocalDatabase
 import com.nikhil.yt.LocalDownloadUtil
@@ -770,43 +768,14 @@ fun SongMenu(
                                 return@clickable
                             }
                             coroutineScope.launch {
-                                Deezer.setLogDir(context.cacheDir)
-                                try {
-                                    Deezer.setArl(deezerArl)
-                                    val loginResult = Deezer.login()
-                                    loginResult.onFailure {
-                                        Toast.makeText(context, "Deezer: Login failed - ${it.message}", Toast.LENGTH_LONG).show()
-                                        return@launch
-                                    }
-                                    val cacheDir = context.cacheDir.resolve("deezer_tmp")
-                                    val title = song.song.title
-                                    val artist = song.artists.joinToString(", ") { it.name }
-                                    val result = Deezer.searchAndDownload(title, artist, cacheDir, deezerQuality)
-                                    result.onSuccess { file ->
-                                        val values = ContentValues().apply {
-                                            put(MediaStore.Audio.Media.DISPLAY_NAME, file.name)
-                                            put(MediaStore.Audio.Media.MIME_TYPE, "audio/mpeg")
-                                            put(MediaStore.Audio.Media.RELATIVE_PATH, "Music/Deezer")
-                                            put(MediaStore.Audio.Media.IS_PENDING, 1)
-                                        }
-                                        val uri = context.contentResolver.insert(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, values)
-                                        if (uri != null) {
-                                            context.contentResolver.openOutputStream(uri)?.use { out ->
-                                                file.inputStream().use { it.copyTo(out) }
-                                            }
-                                            values.clear()
-                                            values.put(MediaStore.Audio.Media.IS_PENDING, 0)
-                                            context.contentResolver.update(uri, values, null, null)
-                                        }
-                                        file.delete()
-                                        Toast.makeText(context, "Saved: ${file.name} → Music/Deezer/", Toast.LENGTH_SHORT).show()
-                                        onDismiss()
-                                    }.onFailure {
-                                        Toast.makeText(context, "Deezer: ${it.message}", Toast.LENGTH_LONG).show()
-                                    }
-                                } catch (e: Exception) {
-                                    Toast.makeText(context, "Deezer: ${e.javaClass.simpleName}: ${e.message}", Toast.LENGTH_LONG).show()
-                                }
+                                downloadFromDeezer(
+                                    context = context,
+                                    arl = deezerArl,
+                                    quality = deezerQuality,
+                                    title = song.song.title,
+                                    artist = song.artists.joinToString(", ") { it.name },
+                                    onDownloaded = onDismiss,
+                                )
                             }
                         },
                         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
