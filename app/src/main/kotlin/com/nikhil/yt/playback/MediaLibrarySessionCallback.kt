@@ -91,6 +91,8 @@ constructor(
             .add(Player.COMMAND_SEEK_TO_MEDIA_ITEM)
             .add(Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM)
             .add(Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM)
+            .add(Player.COMMAND_SEEK_TO_NEXT)
+            .add(Player.COMMAND_SEEK_TO_PREVIOUS)
             .add(Player.COMMAND_STOP)
             .add(Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM)
             .add(Player.COMMAND_SET_SHUFFLE_MODE)
