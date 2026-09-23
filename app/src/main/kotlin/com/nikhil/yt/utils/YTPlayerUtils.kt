@@ -10,6 +10,7 @@ package com.nikhil.yt.utils
 
 import android.net.ConnectivityManager
 import androidx.media3.common.PlaybackException
+import com.metrolist.innertubex.extraction.StreamResolveException
 import com.nikhil.yt.constants.AudioQuality
 import com.nikhil.yt.constants.PlayerStreamClient
 import com.nikhil.yt.innertube.pages.NewPipeUtils
@@ -105,25 +106,38 @@ object YTPlayerUtils {
         if (httpStatusCode != 403 && httpStatusCode != 429) return
         val normalizedClientKey = normalizeStreamClientKey(clientKey)
         if (normalizedClientKey.isEmpty()) return
-        failedStreamClientsUntil[normalizedClientKey] =
-            System.currentTimeMillis() + FAILED_CLIENT_BACKOFF_MS
+        InnerTubeXPlayer.markStreamClientFailed(videoId, normalizedClientKey)
+        blockLegacyStreamClient(videoId, normalizedClientKey, httpStatusCode)
+    }
+
+    private fun blockLegacyStreamClient(videoId: String, normalizedClientKey: String, httpStatusCode: Int) {
+        // A 403 is tied to one stream URL, so only block the client for this video;
+        // a 429 means the client is rate limited and is blocked for every video.
+        val blockKey = if (httpStatusCode == 403) buildFailedClientKey(videoId, normalizedClientKey) else normalizedClientKey
+        failedStreamClientsUntil[blockKey] = System.currentTimeMillis() + FAILED_CLIENT_BACKOFF_MS
     }
 
     private fun isStreamClientTemporarilyBlocked(videoId: String, clientKey: String?): Boolean {
         val normalizedClientKey = normalizeStreamClientKey(clientKey)
         if (normalizedClientKey.isEmpty()) return false
 
-        val until = failedStreamClientsUntil[normalizedClientKey] ?: return false
-        if (until <= System.currentTimeMillis()) {
-            failedStreamClientsUntil.remove(normalizedClientKey)
-            return false
+        return listOf(normalizedClientKey, buildFailedClientKey(videoId, normalizedClientKey)).any { key ->
+            val until = failedStreamClientsUntil[key] ?: return@any false
+            if (until <= System.currentTimeMillis()) {
+                failedStreamClientsUntil.remove(key)
+                false
+            } else {
+                true
+            }
         }
-        return true
     }
 
 
     fun markPreferredClientFailed(videoId: String, client: PlayerStreamClient, httpStatusCode: Int?) {
-        markStreamClientFailed(videoId, client.name, httpStatusCode)
+        if (httpStatusCode != 403 && httpStatusCode != 429) return
+        val normalizedClientKey = normalizeStreamClientKey(client.name)
+        if (normalizedClientKey.isEmpty()) return
+        blockLegacyStreamClient(videoId, normalizedClientKey, httpStatusCode)
     }
     private fun normalizeStreamClientKey(clientKey: String?): String {
         return clientKey?.trim()?.takeIf { it.isNotBlank() }?.uppercase(Locale.US).orEmpty()
@@ -140,11 +154,18 @@ object YTPlayerUtils {
         val format: PlayerResponse.StreamingData.Format,
         val streamUrl: String,
         val streamExpiresInSeconds: Int,
+        /** Client that produced [streamUrl], when known. */
+        val streamClient: String? = null,
+        /** Headers the stream URL must be requested with (User-Agent, Origin, Referer). */
+        val streamHeaders: Map<String, String> = emptyMap(),
+        /** Largest byte range the CDN accepts per request for this stream, when bounded. */
+        val rangeChunkSizeBytes: Long? = null,
     )
+
     /**
      * Custom player response intended to use for playback.
-     * Metadata like audioConfig and videoDetails are from [MAIN_CLIENT].
-     * Format & stream can be from [MAIN_CLIENT] or [STREAM_FALLBACK_CLIENTS].
+     * Streams are resolved by [InnerTubeXPlayer]; the legacy client chain below is only a fallback
+     * for failures that are not a definitive "unavailable" answer from YouTube.
      */
     suspend fun playerResponseForPlayback(
         videoId: String,
@@ -155,6 +176,67 @@ object YTPlayerUtils {
         // if provided, this preference overrides ConnectivityManager.isActiveNetworkMetered
         networkMetered: Boolean? = null,
         avoidCodecs: Set<String> = emptySet(),
+        // false when the whole file is fetched in one request (downloads)
+        allowBoundedRange: Boolean = true,
+    ): Result<PlaybackData> {
+        if (!InnerTubeXPlayer.isInitialized) {
+            return legacyPlayerResponseForPlayback(
+                videoId, playlistId, audioQuality, connectivityManager, preferredStreamClient, networkMetered, avoidCodecs,
+            )
+        }
+        val innerTubeXResult =
+            InnerTubeXPlayer.playerResponseForPlayback(
+                videoId = videoId,
+                playlistId = playlistId,
+                audioQuality = audioQuality,
+                connectivityManager = connectivityManager,
+                networkMetered = networkMetered,
+                avoidCodecs = avoidCodecs,
+                allowBoundedRange = allowBoundedRange,
+            )
+        val innerTubeXError = innerTubeXResult.exceptionOrNull() ?: return innerTubeXResult
+        if (innerTubeXError is java.io.IOException) return innerTubeXResult
+        if (innerTubeXError is StreamResolveException && innerTubeXError.reason in DEFINITIVE_FAILURE_REASONS) {
+            return Result.failure(innerTubeXError.toPlaybackException())
+        }
+
+        Timber.tag(logTag).w("InnerTubeX could not resolve $videoId (${innerTubeXError.message}); trying legacy clients")
+        return legacyPlayerResponseForPlayback(
+            videoId, playlistId, audioQuality, connectivityManager, preferredStreamClient, networkMetered, avoidCodecs,
+        ).recoverCatching { legacyError ->
+            Timber.tag(logTag).w("Legacy clients failed for $videoId too: ${legacyError.message}")
+            // The InnerTubeX failure describes the real cause better than the legacy chain's last client.
+            throw if (innerTubeXError is StreamResolveException) innerTubeXError.toPlaybackException() else innerTubeXError
+        }
+    }
+
+    private val DEFINITIVE_FAILURE_REASONS =
+        setOf(
+            StreamResolveException.Reason.UNAVAILABLE,
+            StreamResolveException.Reason.AGE_RESTRICTED,
+            StreamResolveException.Reason.EXPLICIT_UNSUPPORTED,
+            StreamResolveException.Reason.NETWORK,
+        )
+
+    private fun StreamResolveException.toPlaybackException(): PlaybackException =
+        PlaybackException(
+            message ?: reason.name,
+            this,
+            if (reason == StreamResolveException.Reason.NETWORK) {
+                PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED
+            } else {
+                PlaybackException.ERROR_CODE_REMOTE_ERROR
+            },
+        )
+
+    private suspend fun legacyPlayerResponseForPlayback(
+        videoId: String,
+        playlistId: String?,
+        audioQuality: AudioQuality,
+        connectivityManager: ConnectivityManager,
+        preferredStreamClient: PlayerStreamClient,
+        networkMetered: Boolean?,
+        avoidCodecs: Set<String>,
     ): Result<PlaybackData> = runCatching {
         val attempts =
             when (audioQuality) {

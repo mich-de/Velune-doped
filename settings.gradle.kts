@@ -12,6 +12,14 @@ dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
 
     repositories {
+        exclusiveContent {
+            forRepository {
+                maven("https://jitpack.io")
+            }
+            filter {
+                includeGroup("com.github.MetrolistGroup.innertubex")
+            }
+        }
         google()
         mavenCentral()
         maven { setUrl("https://jitpack.io") }

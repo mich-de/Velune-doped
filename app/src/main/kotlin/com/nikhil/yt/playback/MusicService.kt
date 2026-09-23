@@ -55,6 +55,7 @@ import androidx.media3.common.Player.STATE_IDLE
 import androidx.media3.common.Timeline
 import androidx.media3.common.audio.SonicAudioProcessor
 import androidx.media3.datasource.DataSource
+import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.HttpDataSource
 import androidx.media3.datasource.ResolvingDataSource
@@ -178,6 +179,7 @@ import com.nikhil.yt.utils.DiscordRPC
 import com.nikhil.yt.utils.NetworkConnectivityObserver
 import com.nikhil.yt.utils.StreamClientUtils
 import com.nikhil.yt.utils.SyncUtils
+import com.nikhil.yt.utils.InnerTubeXPlayer
 import com.nikhil.yt.utils.YTPlayerUtils
 import com.nikhil.yt.utils.dataStore
 import com.nikhil.yt.utils.enumPreference
@@ -273,7 +275,7 @@ class MusicService :
         PlayerStreamClientKey,
         PlayerStreamClient.IOS
     )
-    private val playbackUrlCache = ConcurrentHashMap<String, Pair<String, Long>>()
+    private val playbackUrlCache = ConcurrentHashMap<String, CachedPlaybackUrl>()
     private val streamRecoveryState = ConcurrentHashMap<String, Pair<Int, Long>>()
     @Volatile
     private var pendingStreamRefreshValidationMediaId: String? = null
@@ -305,9 +307,11 @@ class MusicService :
                 val userAgent = StreamClientUtils.resolveUserAgent(clientParam)
                 val originReferer = StreamClientUtils.resolveOriginReferer(clientParam)
 
-                val builder = request.newBuilder().header("User-Agent", userAgent)
-                originReferer.origin?.let { builder.header("Origin", it) }
-                originReferer.referer?.let { builder.header("Referer", it) }
+                // Headers supplied with the resolved stream (InnerTubeX) win over the defaults.
+                val builder = request.newBuilder()
+                if (request.header("User-Agent") == null) builder.header("User-Agent", userAgent)
+                if (request.header("Origin") == null) originReferer.origin?.let { builder.header("Origin", it) }
+                if (request.header("Referer") == null) originReferer.referer?.let { builder.header("Referer", it) }
 
                 chain.proceed(builder.build())
             }.build()
@@ -3951,7 +3955,7 @@ class MusicService :
         if (shouldAttemptStreamRefresh && currentMediaId != null && markAndCheckRecoveryAllowance(currentMediaId)) {
             val failingStreamClientKey =
                 playbackUrlCache[currentMediaId]
-                    ?.first
+                    ?.url
                     ?.toHttpUrlOrNull()
                     ?.queryParameter("c")
                     ?.trim()
@@ -3963,6 +3967,14 @@ class MusicService :
             YTPlayerUtils.markPreferredClientFailed(currentMediaId, preferredStreamClient, httpStatusCode)
             YTPlayerUtils.invalidateCachedStreamUrls(currentMediaId)
             playbackUrlCache.remove(currentMediaId)
+            if (httpStatusCode == 403) {
+                scope.launch(Dispatchers.IO) {
+                    // A newer cipher config makes the excluded clients worth retrying.
+                    if (runCatching { InnerTubeXPlayer.refreshAfterStreamRejection() }.getOrDefault(false)) {
+                        InnerTubeXPlayer.clearStreamClientFailures()
+                    }
+                }
+            }
             pendingStreamRefreshValidationMediaId = currentMediaId
             player.prepare()
             player.playWhenReady = true
@@ -4065,6 +4077,20 @@ class MusicService :
             ).setCacheWriteDataSinkFactory(null)
             .setFlags(FLAG_IGNORE_CACHE_ON_ERROR)
 
+    private data class CachedPlaybackUrl(
+        val url: String,
+        val expiresAtMs: Long,
+        val headers: Map<String, String> = emptyMap(),
+        val chunkLength: Long = CHUNK_LENGTH,
+    )
+
+    private fun DataSpec.withCachedPlaybackUrl(cached: CachedPlaybackUrl): DataSpec {
+        val length = if (this.length >= 0) minOf(this.length, cached.chunkLength) else cached.chunkLength
+        return withUri(cached.url.toUri())
+            .withRequestHeaders(httpRequestHeaders + cached.headers)
+            .subrange(uriPositionOffset, length)
+    }
+
     private fun createDataSourceFactory(): DataSource.Factory {
         return ResolvingDataSource.Factory(createCacheDataSource()) { dataSpec ->
             val mediaId = dataSpec.key ?: error("No media id")
@@ -4101,10 +4127,9 @@ class MusicService :
                 }
             }
 
-            playbackUrlCache[mediaId]?.takeIf { it.second > System.currentTimeMillis() }?.let {
+            playbackUrlCache[mediaId]?.takeIf { it.expiresAtMs > System.currentTimeMillis() }?.let {
                 scope.launch(Dispatchers.IO) { recoverSong(mediaId) }
-                val length = if (dataSpec.length >= 0) minOf(dataSpec.length, CHUNK_LENGTH) else CHUNK_LENGTH
-                return@Factory dataSpec.withUri(it.first.toUri()).subrange(dataSpec.uriPositionOffset, length)
+                return@Factory dataSpec.withCachedPlaybackUrl(it)
             }
 
             val playbackData = runBlocking(Dispatchers.IO) {
@@ -4176,10 +4201,16 @@ class MusicService :
 
                 val streamUrl = nonNullPlayback.streamUrl
 
-                playbackUrlCache[mediaId] =
-                    streamUrl to System.currentTimeMillis() + (nonNullPlayback.streamExpiresInSeconds * 1000L)
-                val length = if (dataSpec.length >= 0) minOf(dataSpec.length, CHUNK_LENGTH) else CHUNK_LENGTH
-                return@Factory dataSpec.withUri(streamUrl.toUri()).subrange(dataSpec.uriPositionOffset, length)
+                val cachedPlaybackUrl =
+                    CachedPlaybackUrl(
+                        url = streamUrl,
+                        expiresAtMs = System.currentTimeMillis() + (nonNullPlayback.streamExpiresInSeconds * 1000L),
+                        headers = nonNullPlayback.streamHeaders,
+                        chunkLength = nonNullPlayback.rangeChunkSizeBytes?.takeIf { it > 0 }?.coerceAtMost(CHUNK_LENGTH)
+                            ?: CHUNK_LENGTH,
+                    )
+                playbackUrlCache[mediaId] = cachedPlaybackUrl
+                return@Factory dataSpec.withCachedPlaybackUrl(cachedPlaybackUrl)
             }
         }
     }
@@ -4214,7 +4245,7 @@ class MusicService :
 
     private fun shouldSkipRedundantStreamRefresh(mediaId: String): Boolean {
         if (refreshValidatedPlayingMediaId != mediaId) return false
-        val expiresAt = playbackUrlCache[mediaId]?.second ?: return false
+        val expiresAt = playbackUrlCache[mediaId]?.expiresAtMs ?: return false
         if (expiresAt <= System.currentTimeMillis()) {
             refreshValidatedPlayingMediaId = null
             return false

@@ -60,7 +60,13 @@ constructor(
     private val connectivityManager = context.getSystemService<ConnectivityManager>()!!
     private val audioQuality by enumPreference(context, AudioQualityKey, AudioQuality.AUTO)
     private val preferredStreamClient by enumPreference(context, PlayerStreamClientKey, PlayerStreamClient.ANDROID_VR)
-    private val songUrlCache = HashMap<String, Pair<String, Long>>()
+    private val songUrlCache = HashMap<String, CachedDownloadUrl>()
+
+    private data class CachedDownloadUrl(
+        val url: String,
+        val expiresAtMs: Long,
+        val headers: Map<String, String>,
+    )
 
     // Anti-Bot & Throttling Fields
     private val downloadExecutor = Executors.newFixedThreadPool(3)
@@ -90,14 +96,16 @@ constructor(
 
                 if (!isYouTubeMediaHost) return@addInterceptor chain.proceed(request)
 
-                // Force ANDROID_VR User-Agent to match download stream creation
-                val exactClientName = "ANDROID_VR"
-                val userAgent = StreamClientUtils.resolveUserAgent(exactClientName)
-                val originReferer = StreamClientUtils.resolveOriginReferer(exactClientName)
+                // Headers supplied with the resolved stream win; otherwise match the client
+                // that created the stream URL (its `c` parameter).
+                val clientName = request.url.queryParameter("c")?.trim().orEmpty().ifEmpty { "ANDROID_VR" }
+                val userAgent = StreamClientUtils.resolveUserAgent(clientName)
+                val originReferer = StreamClientUtils.resolveOriginReferer(clientName)
 
-                val builder = request.newBuilder().header("User-Agent", userAgent)
-                originReferer.origin?.let { builder.header("Origin", it) }
-                originReferer.referer?.let { builder.header("Referer", it) }
+                val builder = request.newBuilder()
+                if (request.header("User-Agent") == null) builder.header("User-Agent", userAgent)
+                if (request.header("Origin") == null) originReferer.origin?.let { builder.header("Origin", it) }
+                if (request.header("Referer") == null) originReferer.referer?.let { builder.header("Referer", it) }
 
                 chain.proceed(builder.build())
             }.build()
@@ -129,8 +137,10 @@ constructor(
             }
 
             val cachedUrl = songUrlCache[mediaId]
-            if (cachedUrl != null && cachedUrl.second > System.currentTimeMillis()) {
-                return@Factory dataSpec.withUri(cachedUrl.first.toUri())
+            if (cachedUrl != null && cachedUrl.expiresAtMs > System.currentTimeMillis()) {
+                return@Factory dataSpec
+                    .withUri(cachedUrl.url.toUri())
+                    .withRequestHeaders(dataSpec.httpRequestHeaders + cachedUrl.headers)
             }
 
             val playbackData = runBlocking(Dispatchers.IO) {
@@ -145,6 +155,7 @@ constructor(
                     connectivityManager = connectivityManager,
                     networkMetered = networkMeteredPref,
                     avoidCodecs = avoidStreamCodecs,
+                    allowBoundedRange = false,
                 )
             }.getOrThrow()
 
@@ -191,8 +202,12 @@ constructor(
                 playbackData.streamUrl
             }
 
-            songUrlCache[mediaId] = streamUrlWithRange to (System.currentTimeMillis() + (60 * 60 * 1000L))
-            dataSpec.withUri(streamUrlWithRange.toUri())
+            val expiresAtMs =
+                System.currentTimeMillis() + minOf(60 * 60 * 1000L, playbackData.streamExpiresInSeconds * 1000L)
+            songUrlCache[mediaId] = CachedDownloadUrl(streamUrlWithRange, expiresAtMs, playbackData.streamHeaders)
+            dataSpec
+                .withUri(streamUrlWithRange.toUri())
+                .withRequestHeaders(dataSpec.httpRequestHeaders + playbackData.streamHeaders)
         }
 
     val downloadNotificationHelper =

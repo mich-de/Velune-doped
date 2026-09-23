@@ -28,6 +28,7 @@ import com.nikhil.yt.extensions.*
 import com.nikhil.yt.ui.screens.settings.ThemePalettes
 import com.nikhil.yt.ui.theme.ThemeSeedPalette
 import com.nikhil.yt.ui.theme.ThemeSeedPaletteCodec
+import com.nikhil.yt.utils.InnerTubeXPlayer
 import com.nikhil.yt.utils.dataStore
 import com.nikhil.yt.utils.PreferenceStore
 import com.nikhil.yt.utils.get
@@ -42,6 +43,7 @@ import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
@@ -89,6 +91,7 @@ class App : Application(), SingletonImageLoader.Factory {
         try {
             Timber.plant(com.nikhil.yt.utils.GlobalLogTree())
         } catch (_: Exception) {}
+        InnerTubeXPlayer.initialize(this)
 
         initializeCriticalSync()
         initializeDeferredAsync()
@@ -167,6 +170,17 @@ class App : Application(), SingletonImageLoader.Factory {
                 Timber.e(e, "Error during deferred initialization")
                 reportException(e)
             }
+
+            // Warm the player config, cipher and PO-token state off the first-play path,
+            // once the proxy and visitor data are in place.
+            delay(2500)
+            var waitedMs = 0
+            while (YouTube.visitorData == null && waitedMs < 12_000) {
+                delay(500)
+                waitedMs += 500
+            }
+            runCatching { InnerTubeXPlayer.prewarm() }
+                .onFailure { Timber.w(it, "InnerTubeX prewarm failed") }
         }
 
         applicationScope.launch(Dispatchers.IO) {

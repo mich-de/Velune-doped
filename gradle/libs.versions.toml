@@ -8,7 +8,7 @@ lifecycle = "2.10.0"
 material3 = "1.5.0-alpha09"
 media3 = "1.9.2"
 room = "2.8.4"
-hilt = "2.59.2"
+hilt = "2.60.1"
 ktor = "3.4.1"
 ksp = "2.3.6"
 jsoup = "1.22.1"
@@ -36,6 +36,7 @@ timber = "5.0.1"
 kuromojiIpadic = "0.9.0"
 extractor = "2d2d9ed"
 rhino = "1.9.1"
+innertubex = "v0.7.0"
 multiplatformMarkdown = "0.39.2"
 
 [libraries]
@@ -119,7 +120,8 @@ timber = { module = "com.jakewharton.timber:timber", version.ref = "timber" }
 
 #newpipe-extractor = { module = "com.github.teamnewpipe:NewPipeExtractor", version = "v0.25.0" }
 #newpie-extractor = { module = "com.github.libre-tube:NewPipeExtractor", version = "70be3a4" }
-newpipe-extractor = { module = "com.github.TeamNewPipe:NewPipeExtractor", version = "master-SNAPSHOT" }
+newpipe-extractor = { module = "com.github.TeamNewPipe:NewPipeExtractor", version = "v0.26.5" }
+innertubex = { module = "com.github.MetrolistGroup.innertubex:innertubex", version.ref = "innertubex" }
 #newpipe-extractor = { module = "com.github.mostafaalagamy:MetrolistExtractor", version.ref = "extractor" }
 
 kuromoji-ipadic = { module = "com.atilika.kuromoji:kuromoji-ipadic", version.ref = "kuromojiIpadic" }
