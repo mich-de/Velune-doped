@@ -546,6 +546,7 @@
     <string name="lyrics">Testi</string>
     <string name="translation_success">Traduzione salvata</string>
     <string name="translation_failed">Traduzione fallita</string>
+    <string name="translation_rate_limited">Google sta limitando temporaneamente le richieste di traduzione (HTTP 429). Riprova più tardi.</string>
     <!-- Discord settings additions -->
     <string name="discord_button_options">Opzioni dei pulsanti</string>
     <string name="discord_image_options">Opzioni immagine</string>

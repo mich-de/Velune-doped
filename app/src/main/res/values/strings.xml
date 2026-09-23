@@ -579,6 +579,7 @@ Velune will only extract your token, and everything else is stored locally.</str
     <string name="lyrics">Lyrics</string>
     <string name="translation_success">Translation saved</string>
     <string name="translation_failed">Translation failed</string>
+    <string name="translation_rate_limited">Google is temporarily limiting translation requests (HTTP 429). Try again later.</string>
     <!-- Discord settings additions -->
     <string name="discord_button_options">Button Options</string>
     <string name="discord_image_options">Image Options</string>

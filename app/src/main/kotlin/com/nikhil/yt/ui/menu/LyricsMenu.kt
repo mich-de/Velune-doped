@@ -49,12 +49,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
 import me.bush.translator.Translator
 import me.bush.translator.Language
+import com.nikhil.yt.utils.LyricsTranslator
 import com.nikhil.yt.utils.TranslatorLanguages
+import timber.log.Timber
 import com.nikhil.yt.utils.TranslatorLang
 import androidx.compose.runtime.produceState
 import androidx.compose.ui.res.painterResource
@@ -416,7 +419,8 @@ fun LyricsMenu(
                                             contents.mapIndexedNotNull { idx, c -> if (c != null) idx else null }
                                         val translatedMap = mutableMapOf<Int, String>()
 
-                                        if (translatableIndices.isNotEmpty()) {
+                                        // Fallback: the gtx endpoint of the Translator library, one joined request per batch.
+                                        fun legacyTranslate() {
                                             var sep = "<<<SEP-${UUID.randomUUID()}>>>"
                                             while (contents.any { it?.contains(sep) == true }) {
                                                 sep = "<<<SEP-${UUID.randomUUID()}>>>"
@@ -461,6 +465,26 @@ fun LyricsMenu(
                                             }
                                         }
 
+                                        if (translatableIndices.isNotEmpty()) {
+                                            try {
+                                                val translations = LyricsTranslator.translateLines(
+                                                    translatableIndices.map { contents[it]!! },
+                                                    lang.code,
+                                                )
+                                                translatableIndices.forEachIndexed { i, idx -> translatedMap[idx] = translations[i] }
+                                            } catch (e: CancellationException) {
+                                                throw e
+                                            } catch (e: Exception) {
+                                                Timber.w(e, "Lyrics translation failed; retrying with the gtx translator")
+                                                try {
+                                                    legacyTranslate()
+                                                } catch (legacyError: Exception) {
+                                                    if (legacyError is CancellationException) throw legacyError
+                                                    throw e
+                                                }
+                                            }
+                                        }
+
                                         val out = mutableListOf<String>()
                                         for (i in contents.indices) {
                                             val stamp = stampsFor[i]
@@ -478,10 +502,17 @@ fun LyricsMenu(
                                     viewModel.updateLyrics(mediaMetadataProvider(), translatedLyrics)
                                     showTranslateDialog = false
                                 } catch (e: Exception) {
+                                    if (e is CancellationException) throw e
+                                    val reason =
+                                        if (e is LyricsTranslator.RateLimitedException) {
+                                            context.getString(R.string.translation_rate_limited)
+                                        } else {
+                                            e.localizedMessage ?: e.toString()
+                                        }
                                     Toast.makeText(
                                         context,
-                                        context.getString(R.string.translation_failed) + ": " + (e.localizedMessage ?: e.toString()),
-                                        Toast.LENGTH_SHORT
+                                        context.getString(R.string.translation_failed) + ": " + reason,
+                                        Toast.LENGTH_LONG
                                     ).show()
                                 } finally {
                                     isTranslating = false
