@@ -39,6 +39,9 @@ Tests: `gradlew :app:testArm64DebugUnitTest`
 - `ksp.incremental=false` — fixes `Storage already registered` crash
 - `16kPageAlignment=true` — required for Pixel 10 (Android 15+)
 - Separate `ioScope` and `scope` in `MusicService` — `collectLatest(ioScope)` not `scope`
+- `compileSdk = 37` — required by InnerTubeX (`targetSdk` stays 36)
+- Hilt ≥ 2.60 — older Dagger can't read the Kotlin 2.4 metadata InnerTubeX pulls in
+- NewPipe pinned to a release tag (`v0.26.5`) — `master-SNAPSHOT` no longer resolves on JitPack
 
 ## Lyrics
 - 6 providers: SimpMusic, BetterLyrics, LrcLib, KuGou, YouTubeSubtitle, YouTubeLyrics
@@ -46,6 +49,8 @@ Tests: `gradlew :app:testArm64DebugUnitTest`
 - **Do not save `LYRICS_NOT_FOUND` to DB** — causes permanent "no lyrics" cache with no retry
 - `LyricsScreen.kt` auto-fetches on open; `MusicService.kt` pre-fetches on play
 - Lyrics only visible in full-screen `LyricsScreen` (bottom sheet), not in main player view
+- Translation: `utils/LyricsTranslator.kt` (Google `translate_a/t?client=dict-chrome-ex`, whole song per request; the gtx endpoint answers 429). Neapolitan is normalized by `NeapolitanText.kt` and translated from Corsican (`co`)
+- LrcLib accepts synced lyrics up to ±10 s from the track duration and retries without version suffixes ("Remaster", "Mono"…)
 
 ## PlayerMenu
 - Deezer button at line 648 is **unconditional** (no `if` guard)
@@ -73,6 +78,7 @@ Tests: `gradlew :app:testArm64DebugUnitTest`
 | `playback/MediaLibrarySessionCallback.kt` | Media3 session callback — AA root items, search, `onSetMediaItems` |
 | `playback/PlayerConnection.kt` | UI↔Service bridge via StateFlow |
 | `car/VeluneSession.kt` | AA custom UI screens |
+| `utils/InnerTubeXPlayer.kt` | Stream extraction via InnerTubeX (PO tokens from the WebView in `utils/potoken/`); the legacy client chain in `YTPlayerUtils.kt` is only a fallback |
 | `lyrics/LyricsHelper.kt` | Provider orchestration, LRU cache, romanization |
 | `deezer/Deezer.kt` | ARL auth, search, StripeDecryptor download |
 | `ui/menu/PlayerMenu.kt` | Song context menu — Deezer button at line 648 |
