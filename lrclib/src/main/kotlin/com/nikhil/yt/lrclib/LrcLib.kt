@@ -8,6 +8,7 @@
 
 package com.nikhil.yt.lrclib
 
+import com.nikhil.yt.lrclib.models.MAX_DURATION_DIFFERENCE_SECONDS
 import com.nikhil.yt.lrclib.models.Track
 import com.nikhil.yt.lrclib.models.bestMatchingFor
 import io.ktor.client.HttpClient
@@ -62,28 +63,36 @@ object LrcLib {
         }.body<List<Track>>()
         .filter { it.syncedLyrics != null }
 
+    /** Version suffixes LrcLib titles rarely carry: "(1995 Digital Remaster)", "- Remastered 2011", "[Mono]". */
+    private val VERSION_SUFFIX =
+        Regex(
+            """\s*(?:[(\[][^)\]]*\b(?:remaster(?:ed)?|remasterizzat[oa]|version|versione|mono|stereo|edit|deluxe|anniversary)\b[^)\]]*[)\]]|\s-\s[^-]*\b(?:remaster(?:ed)?|remasterizzat[oa]|version|versione|mono|stereo|edit)\b.*$)""",
+            RegexOption.IGNORE_CASE,
+        )
+
+    /** [title] without version suffixes, or [title] itself when nothing is left. */
+    internal fun cleanTitle(title: String): String = title.replace(VERSION_SUFFIX, "").trim().ifEmpty { title }
+
     suspend fun getLyrics(
         title: String,
         artist: String,
         duration: Int,
         album: String? = null,
     ) = runCatching {
+        findSyncedLyrics(title, artist, duration, album)
+            ?: cleanTitle(title).takeIf { it != title }?.let { findSyncedLyrics(it, artist, duration, album) }
+            ?: throw IllegalStateException("Lyrics unavailable")
+    }
+
+    private suspend fun findSyncedLyrics(
+        title: String,
+        artist: String,
+        duration: Int,
+        album: String?,
+    ): String? {
         val tracks = queryLyrics(artist, title, album)
-
-        val res = when {
-            duration == -1 -> {
-                tracks.bestMatchingFor(duration, title, artist)?.syncedLyrics?.let { LrcLib.Lyrics(it) }
-            }
-            else -> {
-                tracks.bestMatchingFor(duration)?.syncedLyrics?.let { LrcLib.Lyrics(it) }
-            }
-        }
-
-        if (res != null) {
-            return@runCatching res.text
-        } else {
-            throw IllegalStateException("Lyrics unavailable")
-        }
+        val match = if (duration == -1) tracks.bestMatchingFor(duration, title, artist) else tracks.bestMatchingFor(duration)
+        return match?.syncedLyrics?.let { LrcLib.Lyrics(it) }?.text
     }
 
     suspend fun getAllLyrics(
@@ -93,7 +102,10 @@ object LrcLib {
         album: String? = null,
         callback: (String) -> Unit,
     ) {
-        val tracks = queryLyrics(artist, title, album)
+        val tracks =
+            queryLyrics(artist, title, album).ifEmpty {
+                cleanTitle(title).takeIf { it != title }?.let { queryLyrics(artist, it, album) }.orEmpty()
+            }
         var count = 0
         var plain = 0
 
@@ -123,7 +135,7 @@ object LrcLib {
                     count++
                     track.syncedLyrics.let(callback)
                 } else {
-                    if (track.syncedLyrics != null && abs(track.duration.toInt() - duration) <= 2) {
+                    if (track.syncedLyrics != null && abs(track.duration.toInt() - duration) <= MAX_DURATION_DIFFERENCE_SECONDS) {
                         count++
                         track.syncedLyrics.let(callback)
                     }

@@ -18,6 +18,13 @@ data class Track(
     val syncedLyrics: String?,
 )
 
+/**
+ * Largest duration difference, in seconds, accepted for synced lyrics. The closest track always
+ * wins, so a looser match only applies when no version is closer, e.g. a remaster with a
+ * shorter fade-out than every version on LrcLib.
+ */
+internal const val MAX_DURATION_DIFFERENCE_SECONDS = 10
+
 internal fun List<Track>.bestMatchingFor(
     duration: Int,
     trackName: String? = null,
@@ -33,7 +40,7 @@ internal fun List<Track>.bestMatchingFor(
     }
 
     return minByOrNull { abs(it.duration.toInt() - duration) }
-        ?.takeIf { abs(it.duration.toInt() - duration) <= 2 }
+        ?.takeIf { abs(it.duration.toInt() - duration) <= MAX_DURATION_DIFFERENCE_SECONDS }
 }
 
 private fun List<Track>.findBestMatch(trackName: String, artistName: String): Track? {
